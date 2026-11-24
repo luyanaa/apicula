@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 from .bitstream import Bitstream
-from .xpn import parse_xpn
+from .xpn import parse_xpn, wire_local
 
 
 def load_fusemap(path: str | Path) -> list[dict]:
@@ -70,6 +70,55 @@ def program_relative(bs: Bitstream, pips: set[tuple[str, str]],
         if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
             _set(bs, br, bc, val)
             n += 1
+    return n
+
+
+def used_arcs(path: str | Path, tile_row: int, tile_col: int) -> set[tuple[str, str]]:
+    """Tile-local routing arcs from an XPN, oriented as in the BFD.
+
+    The BFD equation is ``fuse = arcval(source, destination)``.  The XPN route
+    line is ``destination.source``; ``xist.xpn`` stores it as ``(source,
+    destination)``, so the BFD arc for a pip is ``(dst_local, src_local)``.
+    """
+    prefix = f"R{tile_row}C{tile_col}_"
+    used = set()
+    for sig in parse_xpn(path).values():
+        for src, dst in sig.route:
+            if src.startswith(prefix) and dst.startswith(prefix):
+                used.add((wire_local(dst), wire_local(src)))
+    return used
+
+
+def routing_equations(tile) -> dict[str, tuple[set[tuple[str, str]], list]]:
+    """Fuses driven only by routing arcs -> (arcs, ram positions)."""
+    from .bfd import _ARC_RE
+    out = {}
+    for name, expr in tile.equations.items():
+        if "arcval" not in expr or "config(" in expr or "property(" in expr:
+            continue
+        arcs = {(m.group(1).strip(), m.group(2).strip())
+                for m in _ARC_RE.finditer(expr)}
+        out[name] = (arcs, tile.fuse_positions(name))
+    return out
+
+
+def program_routing(bs: Bitstream, xpn_path: str | Path, tile, cal,
+                    tile_row: int, tile_col: int) -> int:
+    """Program every routing fuse of one tile from the tile's XPN arcs.
+
+    The fuse is set when any of its arcs is used and cleared otherwise.  This
+    reproduces the vendor bitstream for the routing region (validated end to
+    end, see :mod:`xist.bfdmap`).
+    """
+    used = used_arcs(xpn_path, tile_row, tile_col)
+    n = 0
+    for arcs, positions in routing_equations(tile).values():
+        val = not arcs.isdisjoint(used)
+        for (rr, rc) in positions:
+            br, bc = cal.bit(tile_row, tile_col, rr, rc)
+            if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+                _set(bs, br, bc, val)
+                n += 1
     return n
 
 

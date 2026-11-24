@@ -24,7 +24,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/bbalint.py` | **verified**: dangling label / push-pop checker |
 | `xist/bbasm.py` | **verified**: Python bbasm; produced a valid chipdb blob (magic/version/width/height checked) |
 | routing graph | **bring-up**: complete CIB + long-wire mesh; arbitrary designs route |
-| pip -> fuse map | **expanded**: 209 candidates (124 long-wire, 85 slice/CIP) across 31 tile locations (`SL2-12E_pip_fuses_expanded.json`) |
+| pip -> fuse map | **complete for CIB/long-wire**: vendor BFD data, 2668 arcs / 1976 long-wire across 22 CIB tile types (`SL2-12E_bfd_profiles.json`); PLC validated on 305 bitstreams |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
 | `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for arbitrary LUT/DFF/ALU/MUX/IO designs on the bring-up graph; vendor fuse map / bitstream TODO |
@@ -239,21 +239,90 @@ unique exact matches 8
 ```
 
 The first candidates are in `testdata/SL2-12E_pip_fuses_sample.json`; the
-expanded table (`SL2-12E_pip_fuses_expanded.json`) now has **209 candidates**
-(124 long-wire, 85 slice/CIP) from 31 tile locations.  Each location used
+expanded fuzz table (`SL2-12E_pip_fuses_expanded.json`) has **231 candidates**
+(135 long-wire, 96 slice/CIP) from 63 tile locations.  Each location used
 12 pin variants with the slices locked, a 70/30 fit/holdout split and only
 holdout-clean candidates were merged.
 
-`xist/campaign.py` scales this to any tile list:
+`xist/campaign.py` scales the fuzz campaign to any tile list:
 
 ```bash
 python -m xist.campaign --locations auto:1504 --variants 4 --jobs 8 \
     --out pip_fuses.json
 ```
 
-`auto:1504` selects all PLC tiles.  This is the remaining large campaign: the
-campaigns so far observed 6333 long-wire pips and mapped 124, so a literal
-full-chip map needs the full run (or decoding the vendor database).
+`auto:1504` selects all PLC tiles.  That literal campaign is no longer needed:
+the vendor tool stores the complete routing fuse map, and `'bfd.dumpbfd` dumps
+it in 18.8 MB.  See the next section.
+
+### Complete CIB/long-wire fuse map from the vendor BFD
+
+```
+dv.setup SEALION SL2-12E-8F256C
+'bfd.dumpbfd /tmp/SL2-12E.bfd
+exit
+```
+
+`xist/bfd.py` parses each tile type's 29x48 Ram fuse grid and its Boolean
+equations (``fuse = arcval(source, destination) || ...``).  `xist/bfdmap.py`
+exports the routing tables and calibrates tile-local Ram addresses to absolute
+bitstream bits:
+
+```
+bit_row = 29 * (tile_row - 1) + ram_row
+bit_col = column_base[tile_col] - ram_col
+```
+
+`column_base` is the slice-D block origin plus 44, with a measured per-column
+correction (`testdata/SL2-12E_bitcol_base.json`).
+
+Complete PLC (the CIB tile type):
+
+```
+arcs 2500 (1920 touching a long wire), fuses 1392, routing fuses 1128
+```
+
+Profiles cover the whole 29x48 CIB family (PLC, CIB_CFG*, CIB_DSP*, CIB_EBR*),
+22 tile types with 2668 distinct arcs, 1976 of them long-wire:
+
+```
+testdata/SL2-12E_bfd_profiles.json   (4 profiles, compact)
+testdata/SL2-12E_bfd_PLC.json        (PLC in detail)
+```
+
+**Validation**: the BFD equations were evaluated for 305 routed `io_pass`
+bitstreams (slices locked at 15 tile locations) and compared with the vendor
+bitstream.  All routing-fuse predictions match:
+
+```
+designs checked 305, perfect 305
+344040 fuse predictions, 344040 matches (100.000%), 7516 predicted set
+```
+
+`xist/program.py` can write them:
+
+```python
+from xist.bfd import parse
+from xist.bfdmap import load_calibration
+from xist.program import program_routing
+tiles = parse("SL2-12E.bfd")
+cal = load_calibration()
+program_routing(bs, "design.xpn", tiles["PLC"], cal, 20, 19)
+```
+
+Starting from an unrelated `.bit`, programming the routing region from a
+design's XPN reproduces the vendor routing bits exactly (305/305 designs).
+
+As a cross-check on completeness, 829 of the 840 distinct vendor-named
+long-wire pips seen in the routed corpus are present verbatim in the PLC arc
+set (98.7%).  The other 11 are same-track reversal pairs (`V02N0400` ->
+`V02S0401`) that act as wire aliases; the corpus also contains 103 `J*` wires
+invented by the nextpnr bring-up model, which have no vendor fuse.
+
+The 59-column PIC/LLC/ULC tile types have their own wider Ram grid; they are
+parsed but not part of the exported CIB profiles.  Fuses whose equation mixes
+`config()`/`property()` with `arcval()` depend on slice configuration and are
+not driven by the arc-only writer.
 
 **Holdout validation**: 8 new pin variants (not used in the fit) predict all
 8 candidates **8/8**, including the inverted-polarity cases.

@@ -42,11 +42,19 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   known from `SL2-12E_columns.json`; the permutation needs a per-tile campaign
   (`python -m xist.cli tiles ...`) or an equivalence-class study.
 * DFF / PIO / EBR / DSP fuse maps.
-* Routing fuse map (pip -> bits): 209 candidates (124 long-wire, 85 slice/CIP)
-  across 31 tile locations, holdout-validated per location; see
-  `testdata/SL2-12E_pip_fuses_expanded.json` and `xist/campaign.py`.
-  A literal full-chip map still needs the full `auto:1504` campaign or a dump
-  of the vendor device database.
+* Routing fuse map (pip -> bits): **complete for the CIB/long-wire network**
+  from the vendor BFD (`'bfd.dumpbfd`): 2668 arcs (1976 long-wire) over the 22
+  CIB tile types in `testdata/SL2-12E_bfd_profiles.json`, with PLC detail in
+  `testdata/SL2-12E_bfd_PLC.json` (2500 arcs, 1392 fuses, 1128 routing fuses).
+  Bit coordinates come from `xist/bfdmap.py` + `SL2-12E_bitcol_base.json` and
+  were validated on 305 routed bitstreams (344040/344040 fuse bits match).
+  `xist/program.py` (`program_routing`) writes them from an XPN.
+  The 59-column PIC/LLC/ULC tile variants are parsed but not exported, and
+  fuses whose equation mixes `config()` with `arcval()` still need the config
+  model.
+  The fuzz campaign (`xist/campaign.py`, 231 holdout-validated candidates)
+  remains as an independent cross-check: 128/135 of its vendor-named pips are
+  predicted exactly by the BFD map.
   The long-wire naming (`V06S0300` -> `V06S0302` -> ...) is decoded and the
   intermediate wires are generated, but the CIB/track-switch graph is still
   incomplete (a one-LUT IO design does not route yet).

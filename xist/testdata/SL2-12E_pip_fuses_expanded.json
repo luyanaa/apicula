@@ -1,5 +1,5 @@
 {
- "note": "Expanded pip->fuse candidate table: a&b (22 fit + 8 holdout), io_pass at R20C19 (15 fit + 8 holdout), and io_pass at 14 further tile locations (70/30 fit/holdout per location).  Pips that never varied in the campaigns are not covered; this is an expansion, not a complete map. Plus 8-location/12-variant run of the xist.campaign tool.",
+ "note": "Fuzz-derived pip->fuse candidates (routing-only pin variants, fit/holdout). Kept as an independent validation set for the complete map. The complete CIB/long-wire routing fuse map is extracted from the vendor BFD ('bfd.dumpbfd); see SL2-12E_bfd_profiles.json (22 tile types, 2668 arcs, 1976 long-wire) and SL2-12E_bfd_PLC.json (PLC: 2500 arcs, 1392 fuses).",
  "device": "SL2-12E-8F256C",
  "candidates": 231,
  "locations": 15,
@@ -4138,5 +4138,16 @@
    "invert": false,
    "source": "campaign32"
   }
- ]
+ ],
+ "complete_map": {
+  "source": "xist/testdata/SL2-12E_bfd_profiles.json",
+  "plc_arcs": 2500,
+  "plc_fuses": 1392,
+  "plc_routing_fuses": 1128,
+  "cib_tile_types": 22,
+  "cib_arcs_union": 2668,
+  "long_wire_arcs_union": 1976,
+  "bit_calibration": "xist/testdata/SL2-12E_bitcol_base.json",
+  "validation": "305 routed bitstreams: 344040/344040 routing fuse bits match"
+ }
 }
