@@ -10,6 +10,7 @@ permutation.
 
 from __future__ import annotations
 
+import functools
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -183,3 +184,33 @@ def slot_for(cal: LutCalibration, tile_row: int, tile_col: int,
         raise KeyError(f"no column origin for tile column {tile_col}")
     base = origin + SLICE_BLOCK_OFFSET[ref_slice]
     return LutSlot(tuple((ROW_PITCH * tile_row + dr, base + dc) for dr, dc in rel))
+
+
+def calibrate_tiles(part: str, tiles: list[str], workdir: str | Path,
+                    jobs: int = 1, timeout: int = 900) -> dict:
+    """Calibrate many slice locations, optionally in parallel.
+
+    Returns ``{loc: calibration_json}``.  A failed location gets ``{"error": ...}``
+    so a long campaign can continue past unsupported tiles.
+    """
+    workdir = Path(workdir)
+    fn = functools.partial(_calibrate_one, part, str(workdir), timeout)
+    out: dict = {}
+    if jobs <= 1:
+        for loc in tiles:
+            k, v = fn(loc)
+            out[k] = v
+        return out
+    from concurrent.futures import ProcessPoolExecutor
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        for k, v in ex.map(fn, tiles):
+            out[k] = v
+    return out
+
+
+def _calibrate_one(part: str, workdir: str, timeout: int, loc: str):
+    try:
+        cal = calibrate_slice(part, loc, Path(workdir) / loc, timeout=timeout)
+        return loc, cal.to_json()
+    except Exception as e:  # noqa: BLE001
+        return loc, {"error": str(e)}

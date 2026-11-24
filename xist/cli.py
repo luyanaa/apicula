@@ -87,6 +87,23 @@ def cmd_columns(args) -> int:
     return 0
 
 
+def cmd_tiles(args) -> int:
+    from .lutmap import calibrate_tiles
+    tiles = [t.strip() for t in args.tiles.split(",") if t.strip()] if args.tiles else []
+    if not tiles:
+        for r in range(*[int(x) for x in args.rows.split(":")]):
+            for c in range(*[int(x) for x in args.cols.split(":")]):
+                for s in "ABCD":
+                    tiles.append(f"R{r}C{c}{s}")
+    res = calibrate_tiles(args.part, tiles, args.out, jobs=args.jobs)
+    ok = sum(1 for v in res.values() if "error" not in v)
+    print(f"{ok}/{len(res)} tiles calibrated")
+    dest = Path(args.save or Path(args.out) / "tiles.json")
+    dest.write_text(json.dumps(res, indent=2) + "\n")
+    print(f"saved {dest}")
+    return 0
+
+
 def cmd_chipdb(args) -> int:
     rep = parse_udev_report(Path(args.udev).read_text(encoding="utf-8"))
     luts = {}
@@ -147,6 +164,16 @@ def main(argv=None) -> int:
     p.add_argument("--save", default=None)
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_columns)
+
+    p = sub.add_parser("tiles", help="calibrate many PLC slice locations")
+    p.add_argument("--part", required=True)
+    p.add_argument("--tiles", default=None, help="comma separated R..C..A-D list")
+    p.add_argument("--rows", default="2:40")
+    p.add_argument("--cols", default="2:49")
+    p.add_argument("--jobs", type=int, default=1)
+    p.add_argument("--out", default=".")
+    p.add_argument("--save", default=None)
+    p.set_defaults(func=cmd_tiles)
 
     p = sub.add_parser("chipdb", help="emit a himbaechel .bba chipdb")
     p.add_argument("--part", required=True)

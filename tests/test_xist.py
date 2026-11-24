@@ -199,3 +199,13 @@ def test_real_lut_codec():
     coords = [(r, c) for r, c, _ in slot.coords()]
     assert len(set(coords)) == 16
     assert all(0 <= r < 400 and 0 <= c < 3000 for r, c in coords)
+
+
+def test_lut_position_samples():
+    import json
+    base = Path(__file__).resolve().parents[1] / "xist/testdata"
+    d = json.loads((base / "SL2-12E_lut_samples.json").read_text())
+    assert set(d["samples"]) == {"R10C10D", "R20C10D", "R10C19D", "R20C19D"}
+    for cal in d["samples"].values():
+        coords = [tuple(v) for v in cal["minterms"].values()]
+        assert len(set(coords)) == 16

@@ -114,9 +114,9 @@ live in bitmap rows 287/288, with block columns:
 The layouts are genuinely different, which is why the tool records all 16
 coordinates instead of a single permutation.  Verification: re-encoding each
 `1 << i` into the `i = 0` probe reproduces the vendor bitstream **exactly**
-(0 differing rows, all four slices).  F1 (the second LUT of a slice) is the F0
-map shifted by -2 rows for slice A; B/C/D are inferred the same way and still
-need a two-LUT probe to confirm.
+(0 differing rows, all four slices).  F1 (the second LUT of a slice) is a
+separate slot: at R10C10A it shares F0's column block with rows shifted by -2,
+but its offset changes with tile position (see the caveat below).
 
 The full maps are in `xist/testdata/SL2-12E_lut_{A,B,C,D}.json` and combined in
 `SL2-12E_lut_all.json`.
@@ -132,18 +132,39 @@ col  = column_origin[tile_col] + {"D":0, "C":8, "B":24, "A":32}[slice] + col_rel
 C0/C1/C49/C50 have no slice).  `xist.lutmap.slot_for()` implements the formula
 and reproduces the C10 maps exactly.
 
-**Important caveat: the minterm permutation is position dependent.**  The
-calibration at R10C10D gives the D-slice layout `(7,5,3,1,0,2,4,6)`; the same
-probe at R20C19D gives `(7,5,6,4,3,1,2,0)`.  The vendor packer maps the logical
-LUT inputs A/B/C/D to physical LUT inputs differently depending on tile position,
-and the F1 block offset also changes (R10C10D: same block as F0; R20C19D:
-+31 columns).  Therefore a single calibration cannot be extrapolated across the
+**Important caveat: the minterm permutation is position dependent.**  Three
+samples of the D-slice layout (column offsets for minterms 0..7) show it changes
+with both row and column:
+
+```
+R10C10D : 7,5,3,1  7,5,3,1   (rows 288/287 in groups of four)
+R10C19D : 7,5,3,1  7,5,3,1   (same as C10 at row 10)
+R20C10D : 7,7,3,3  5,5,1,1   (rows 578/577 alternating)
+R20C19D : 7,5,6,4  3,1,2,0
+```
+
+The permutation is therefore not a function of row alone or column alone; the
+four samples are saved in `SL2-12E_lut_samples.json`.
+
+The vendor packer maps the logical LUT inputs A/B/C/D to physical LUT inputs
+differently depending on tile position.  F1 shares F0's column block at
+R10C10 (verified for slices A and D); its offset at other positions has not been
+verified yet.  Therefore a single calibration cannot be extrapolated across the
 whole chip.  The tools support calibrating any tile (`calibrate --loc ...`);
 building the full table needs one calibration per PLC tile (1504), which is a
 parallel/overnight fuzz job, or a study of the mirroring pattern.
 
 The reference-tile maps in `testdata/` are verified examples, not a device-wide
-lookup.
+lookup.  If the mirroring pattern cannot be derived from a few samples, run the
+campaign in parallel:
+
+```bash
+# 4 slices x 38 rows x 47 columns ~= 7100 calibrations, 16 probes each
+python -m xist.cli tiles --part SL2-12E-8F256C --rows 2:40 --cols 2:49 \
+    --jobs 8 --save /tmp/xist/tiles.json
+```
+
+Each worker gets its own directory, so the vendor tool instances do not clash.
 
 ## Chip database
 
