@@ -88,15 +88,19 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
 def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
     tt = chip.create_tile_type(name)
     for s in range(n_io):
-        tt.create_wire(f"IO{s}_PAD")
-        tt.create_wire(f"IO{s}_I")
-        tt.create_wire(f"IO{s}_O")
-        tt.create_wire(f"IO{s}_OE")
-        b = tt.create_bel(f"PIO_{SLICE_LETTERS[s]}", "PIO", s)
-        tt.add_bel_pin(b, "PAD", f"IO{s}_PAD", PinType.INOUT)
-        tt.add_bel_pin(b, "I", f"IO{s}_I", PinType.INPUT)
-        tt.add_bel_pin(b, "O", f"IO{s}_O", PinType.OUTPUT)
-        tt.add_bel_pin(b, "OE", f"IO{s}_OE", PinType.INPUT)
+        slot = SLICE_LETTERS[s]
+        # Vendor XPN names: input data JDIx, input mux JPADDIx_PIO,
+        # fabric->pad mux JPADDOx, pad data PADDOx_PIO.
+        for w in (f"PAD_{slot}", f"JDI{slot}", f"JPADDI{slot}_PIO",
+                  f"JPADDO{slot}", f"PADDO{slot}_PIO", f"OE_{slot}"):
+            tt.create_wire(w)
+        b = tt.create_bel(f"PIO_{slot}", "PIO", s)
+        tt.add_bel_pin(b, "PAD", f"PAD_{slot}", PinType.INOUT)
+        tt.add_bel_pin(b, "PADDI", f"JDI{slot}", PinType.OUTPUT)
+        tt.add_bel_pin(b, "PADDO", f"PADDO{slot}_PIO", PinType.INPUT)
+        tt.add_bel_pin(b, "OE", f"OE_{slot}", PinType.INPUT)
+        tt.create_pip(f"JDI{slot}", f"JPADDI{slot}_PIO")
+        tt.create_pip(f"JPADDO{slot}", f"PADDO{slot}_PIO")
 
 
 def _add_hard_tile_type(chip: Chip, name: str) -> None:
@@ -197,6 +201,10 @@ def build_chip(part: str, report: DeviceReport,
                 continue
             tt = chip.tile_types[chip.tile_type_idx[tok_s]]
             tt.create_pip(ls, ld)
+            # The XPN edge direction is not fully documented; add the reverse
+            # edge as well for bring-up so the router can use the observed
+            # connection.  The bitstream fuser will need the real direction.
+            tt.create_pip(ld, ls)
             added_pips[key] = True
         else:
             a = (rs, cs, ls)
@@ -205,6 +213,11 @@ def build_chip(part: str, report: DeviceReport,
                 continue
             chip.add_node([NodeWire(cs, rs, ls), NodeWire(cd, rd, ld)])
             used_in_node.update((a, b))
+
+    # Long wires: the vendor names encode length/direction/track/segment, e.g.
+    # V06S0300 at R20 connects to V06S0302 at R22, ... V06S0306 at R26.
+    # The XPN only lists the endpoints, so rebuild the chains as nodes.
+    _connect_long_wires(chip, report)
 
     # package pins -> PIO bels via the vendor site string (PL12C, PT13B, ...)
     if pkg_pins:
@@ -252,3 +265,158 @@ def pad_location(site: str, rows: int = 40, cols: int = 51) -> tuple[int, int, s
     if side == "T":
         return 0, num, slot
     return rows - 1, num, slot
+
+
+_LONG_RE = re.compile(r"^([VH])(\d{2})([NSEW])(\d{2})(\d{2})$")
+_DIR_STEP = {"N": (-2, 0), "S": (2, 0), "E": (0, 2), "W": (0, -2)}
+
+
+def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
+    """Union long-wire segments (V06S0300 -> V06S0302 -> ...) into nodes.
+
+    XPN only lists the endpoints of a long wire.  The vendor name encodes the
+    length, direction, track and segment offset, so the full chain can be
+    reconstructed and the intermediate wires created on demand.
+    """
+    parent: dict[tuple[int, int, str], tuple[int, int, str]] = {}
+
+    def find(k):
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for r, row in enumerate(report.tiles):
+        for c, tok in enumerate(row):
+            if not tok or tok == ".":
+                continue
+            tt = chip.tile_types[chip.tile_type_idx[tok]]
+            idx2str = {v: k for k, v in tt.strs.strs.items()}
+            for wd in list(tt.wires):
+                name = idx2str.get(wd.name.index)
+                if not name:
+                    continue
+                m = _LONG_RE.match(name)
+                if not m:
+                    continue
+                kind, ln, d, track, seg = m.groups()
+                ln, seg = int(ln), int(seg)
+                dr, dc = _DIR_STEP[d]
+                for s in range(0, ln + 1, 2):
+                    step = (s - seg) // 2
+                    tr, tc = r + dr * step, c + dc * step
+                    if not (0 <= tr < report.rows and 0 <= tc < report.cols):
+                        continue
+                    ntok = report.tiles[tr][tc]
+                    if not ntok or ntok == ".":
+                        continue
+                    ntt = chip.tile_types[chip.tile_type_idx[ntok]]
+                    nname = f"{kind}{ln:02d}{d}{track}{s:02d}"
+                    if not ntt.has_wire(nname):
+                        ntt.create_wire(nname)
+                    union((r, c, name), (tr, tc, nname))
+
+    comps: dict[tuple, list[tuple[int, int, str]]] = {}
+    for k in list(parent):
+        comps.setdefault(find(k), []).append(k)
+    for comp in comps.values():
+        if len(comp) < 2:
+            continue
+        try:
+            chip.add_node([NodeWire(c, r, w) for r, c, w in comp])
+        except AssertionError:
+            # a wire already belongs to an XPN-derived node; leave it alone
+            pass
+
+
+def _package_name(part: str) -> str:
+    # SL2-12E-8F256C -> F256
+    tail = part.rsplit("-", 1)[-1]
+    tail = tail.lstrip("0123456789")
+    return tail[:-1] if tail and tail[-1] in "CI" else tail
+
+
+def pad_location(site: str, rows: int = 40, cols: int = 51) -> tuple[int, int, str] | None:
+    """Decode a vendor pad site such as PL12C / PT13B / PR5A / PB7D.
+
+    Returns (row, col, slot) for the 51x40 SL2-12E grid.
+    """
+    m = re.match(r"^P([LRTB])(\d+)([A-D])$", site.strip())
+    if not m:
+        return None
+    side, num, slot = m.group(1), int(m.group(2)), m.group(3)
+    if side == "L":
+        return num, 0, slot
+    if side == "R":
+        return num, cols - 1, slot
+    if side == "T":
+        return 0, num, slot
+    return rows - 1, num, slot
+
+
+_LONG_RE = re.compile(r"^([VH])(\d{2})([NSEW])(\d{2})(\d{2})$")
+_DIR_STEP = {"N": (-2, 0), "S": (2, 0), "E": (0, 2), "W": (0, -2)}
+
+
+def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
+    """Union long-wire segments (V06S0300 -> V06S0302 -> ...) into nodes."""
+    parent: dict[tuple[int, int, str], tuple[int, int, str]] = {}
+
+    def find(k):
+        parent.setdefault(k, k)
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    # Every grid position that has a tile type with the wire can join.
+    for r, row in enumerate(report.tiles):
+        for c, tok in enumerate(row):
+            if not tok or tok == ".":
+                continue
+            tt = chip.tile_types[chip.tile_type_idx[tok]]
+            idx2str = {v: k for k, v in tt.strs.strs.items()}
+            for wd in tt.wires:
+                name = idx2str[wd.name.index]
+                m = _LONG_RE.match(name)
+                if not m:
+                    continue
+                _, ln, d, track, seg = m.groups()
+                ln, seg = int(ln), int(seg)
+                if seg + 2 > ln:
+                    continue
+                dr, dc = _DIR_STEP[d]
+                nr, nc = r + dr, c + dc
+                if not (0 <= nr < report.rows and 0 <= nc < report.cols):
+                    continue
+                ntok = report.tiles[nr][nc]
+                if not ntok or ntok == ".":
+                    continue
+                ntt = chip.tile_types[chip.tile_type_idx[ntok]]
+                nname = f"{m.group(1)}{ln:02d}{d}{track}{seg+2:02d}"
+                if not ntt.has_wire(nname):
+                    continue
+                union((r, c, name), (nr, nc, nname))
+
+    comps: dict[tuple, list[tuple[int, int, str]]] = {}
+    for k in list(parent):
+        comps.setdefault(find(k), []).append(k)
+    for comp in comps.values():
+        if len(comp) < 2:
+            continue
+        try:
+            chip.add_node([NodeWire(c, r, w) for r, c, w in comp])
+        except AssertionError:
+            # a wire already belongs to an XPN-derived node; leave it alone
+            pass

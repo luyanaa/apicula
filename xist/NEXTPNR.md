@@ -39,6 +39,9 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   (`python -m xist.cli tiles ...`) or an equivalence-class study.
 * DFF / PIO / EBR / DSP fuse maps.
 * Routing fuse map (pip -> bits) and the PIO/IOLOGIC + inter-tile routing graph.
+  The long-wire naming (`V06S0300` -> `V06S0302` -> ...) is decoded and the
+  intermediate wires are generated, but the CIB/track-switch graph is still
+  incomplete (a one-LUT IO design does not route yet).
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch

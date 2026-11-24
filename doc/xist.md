@@ -179,9 +179,11 @@ Each worker gets its own directory, so the vendor tool instances do not clash.
 * routing: every `dst.src` pair in the XPN corpus becomes a pip (same tile) or a
   node (cross-tile long wire).
 
-The routing graph is intentionally incomplete: it only contains resources the
-vendor router used in the supplied designs.  A production database needs a
-systematic pip fuzzer (see below).
+The routing graph is intentionally incomplete.  It currently contains the
+resources used by the supplied XPN corpus, plus the long-wire segment chains
+reconstructed from the vendor names.  It is not yet connected enough to route
+even a one-LUT design: the CIB/track-switch part and the PIO/IOLOGIC path still
+need mapping.  A production database needs a systematic pip fuzzer.
 
 ## Next steps
 

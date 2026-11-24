@@ -65,12 +65,12 @@ def convert(module: dict) -> dict:
                            "port_directions": dirs}
         elif typ == "IBUF":
             cells[name] = {"type": "PIO", "parameters": {}, "attributes": attrs,
-                           "connections": {"PAD": conn["I"], "O": conn["O"]},
-                           "port_directions": {"PAD": "input", "O": "output"}}
+                           "connections": {"PAD": conn["I"], "PADDI": conn["O"]},
+                           "port_directions": {"PAD": "input", "PADDI": "output"}}
         elif typ == "OBUF":
             cells[name] = {"type": "PIO", "parameters": {}, "attributes": attrs,
-                           "connections": {"I": conn["I"], "PAD": conn["O"]},
-                           "port_directions": {"I": "input", "PAD": "output"}}
+                           "connections": {"PADDO": conn["I"], "PAD": conn["O"]},
+                           "port_directions": {"PADDO": "input", "PAD": "output"}}
         elif typ in ("VCC", "GND") or typ.startswith("$specify"):
             continue
         else:
