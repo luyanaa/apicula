@@ -10,6 +10,9 @@ Collected from HqFpga-XIST V3.1.0 (P022026) on **SL2-12E-8F256C**.
 | `SL2-12E_lut_all.json` | combined | the four maps + inferred F1 maps |
 | `SL2-12E_columns.json` | column sweep | tile column -> bitstream block origin (slice A block at R10) |
 | `counter.xpn` | `xpn.write` | routed physical netlist for a 4-bit counter |
+| `SL2-12E_lut_samples.json` | probes | four D-slice calibrations showing position dependence |
+| `SL2-12E_lut_grid4.json` | probes | 4x4 tile grid of D-slice calibrations |
+| `simple_yosys.json` | Yosys | minimal LUT2+DFF netlist for the JSON converter test |
 
 Regenerate with:
 

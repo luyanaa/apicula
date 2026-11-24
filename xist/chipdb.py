@@ -64,12 +64,12 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
         d0 = tt.create_bel(f"DFF{2*s}", "DFF", 4 * s + 2)
         d1 = tt.create_bel(f"DFF{2*s+1}", "DFF", 4 * s + 3)
         for lut, inp, out in ((l0, 0, 0), (l1, 1, 1)):
-            for pin, w in zip("ABCD", "ABCD"):
+            for pin, w in zip(("I[0]", "I[1]", "I[2]", "I[3]"), "ABCD"):
                 tt.add_bel_pin(lut, pin, p + w, PinType.INPUT)
-            tt.add_bel_pin(lut, "Z", p + f"F{out}", PinType.OUTPUT)
+            tt.add_bel_pin(lut, "F", p + f"F{out}", PinType.OUTPUT)
         for dff, idx in ((d0, 0), (d1, 1)):
             tt.add_bel_pin(dff, "D", p + f"DI{idx}", PinType.INPUT)
-            tt.add_bel_pin(dff, "CK", p + "CLK", PinType.INPUT)
+            tt.add_bel_pin(dff, "CLK", p + "CLK", PinType.INPUT)
             tt.add_bel_pin(dff, "Q", p + f"Q{idx}", PinType.OUTPUT)
         # LUT output can feed the slice DFF and the fabric output
         tt.create_pip(p + "F0", p + "DI0")
@@ -88,8 +88,8 @@ def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
         tt.create_wire(f"IO{s}_OE")
         b = tt.create_bel(f"PIO_{SLICE_LETTERS[s]}", "PIO", s)
         tt.add_bel_pin(b, "PAD", f"IO{s}_PAD", PinType.INOUT)
-        tt.add_bel_pin(b, "I", f"IO{s}_I", PinType.OUTPUT)
-        tt.add_bel_pin(b, "O", f"IO{s}_O", PinType.INPUT)
+        tt.add_bel_pin(b, "I", f"IO{s}_I", PinType.INPUT)
+        tt.add_bel_pin(b, "O", f"IO{s}_O", PinType.OUTPUT)
         tt.add_bel_pin(b, "OE", f"IO{s}_OE", PinType.INPUT)
 
 
@@ -119,8 +119,11 @@ def build_chip(part: str, report: DeviceReport,
                luts: dict[str, LutCalibration] | None = None,
                xpn_paths: list[str] | None = None,
                pkg_pins: list[dict] | None = None,
-               columns: dict[int, int | None] | None = None) -> XistChip:
+               columns: dict[int, int | None] | None = None,
+               constids_path: str | Path | None = None) -> XistChip:
     chip = Chip("xist", part, report.cols, report.rows)
+    if constids_path:
+        chip.strs.read_constids(str(constids_path))
     chip.set_speed_grades(["8"])
     luts = luts or {}
 

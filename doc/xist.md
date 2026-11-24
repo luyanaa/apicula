@@ -26,7 +26,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | routing graph | **partial**: only pips observed in the XPN corpus |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
-| `nextpnr` uarch (`xist.cc`, packer, writer) | **not started** |
+| `nextpnr` uarch (`xist.cc`, packer, writer) | **bring-up**: loads the chipdb and places LUT4/DFF/PIO; routing/bitstream TODO |
 
 ## Quick start
 

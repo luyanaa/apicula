@@ -209,3 +209,26 @@ def test_lut_position_samples():
     for cal in d["samples"].values():
         coords = [tuple(v) for v in cal["minterms"].values()]
         assert len(set(coords)) == 16
+
+
+def test_nextpnr_json_convert(tmp_path):
+    from xist.nextpnr_json import convert
+    import json
+    base = Path(__file__).resolve().parents[1] / "xist/testdata"
+    data = json.loads((base / "simple_yosys.json").read_text())
+    top = convert(data["modules"]["top"])
+    types = sorted(c["type"] for c in top["cells"].values())
+    assert types == ["DFF", "LUT4", "PIO", "PIO", "PIO", "PIO"]
+    for c in top["cells"].values():
+        if c["type"] == "LUT4":
+            assert set(c["connections"]) <= {"I[0]", "I[1]", "I[2]", "I[3]", "F"}
+            assert len(c["parameters"]["INIT"]) == 16
+
+
+def test_lut_grid4_samples():
+    import json
+    p = Path(__file__).resolve().parents[1] / "xist/testdata/SL2-12E_lut_grid4.json"
+    d = json.loads(p.read_text())
+    samples = {k: v for k, v in d.items() if k.startswith("R")}
+    assert len(samples) == 16
+    assert all("error" not in v for v in samples.values())
