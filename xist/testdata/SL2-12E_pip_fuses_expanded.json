@@ -1,7 +1,7 @@
 {
  "note": "Expanded pip->fuse candidate table: a&b (22 fit + 8 holdout), io_pass at R20C19 (15 fit + 8 holdout), and io_pass at 14 further tile locations (70/30 fit/holdout per location).  Pips that never varied in the campaigns are not covered; this is an expansion, not a complete map. Plus 8-location/12-variant run of the xist.campaign tool.",
  "device": "SL2-12E-8F256C",
- "candidates": 209,
+ "candidates": 231,
  "locations": 15,
  "matches": [
   {
@@ -456,6 +456,24 @@
   },
   {
    "pip": [
+    "R11C2_D6_SLICE",
+    "R11C2_D6"
+   ],
+   "pips": [
+    [
+     "R11C2_D6_SLICE",
+     "R11C2_D6"
+    ]
+   ],
+   "pos": [
+    316,
+    2276
+   ],
+   "invert": true,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R12C16_V02N0000",
     "R12C16_V06N0006"
    ],
@@ -600,6 +618,24 @@
   },
   {
    "pip": [
+    "R12C2_D6_SLICE",
+    "R12C2_D6"
+   ],
+   "pips": [
+    [
+     "R12C2_D6_SLICE",
+     "R12C2_D6"
+    ]
+   ],
+   "pos": [
+    345,
+    2276
+   ],
+   "invert": true,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R12C30_H06E0200",
     "R12C30_H06E0306"
    ],
@@ -654,6 +690,24 @@
   },
   {
    "pip": [
+    "R13C2_C6_SLICE",
+    "R13C2_C6"
+   ],
+   "pips": [
+    [
+     "R13C2_C6_SLICE",
+     "R13C2_C6"
+    ]
+   ],
+   "pos": [
+    362,
+    2304
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R14C25_H06E0200",
     "R14C25_H06E0306"
    ],
@@ -687,6 +741,24 @@
    ],
    "invert": false,
    "source": "R20C19_io_pass"
+  },
+  {
+   "pip": [
+    "R14C38_H06E0200",
+    "R14C38_H06E0206"
+   ],
+   "pips": [
+    [
+     "R14C38_H06E0200",
+     "R14C38_H06E0206"
+    ]
+   ],
+   "pos": [
+    383,
+    586
+   ],
+   "invert": false,
+   "source": "campaign32"
   },
   {
    "pip": [
@@ -759,6 +831,96 @@
    ],
    "invert": false,
    "source": "R4C30_io_pass"
+  },
+  {
+   "pip": [
+    "R17C2_C5",
+    "R17C2_H02E0101"
+   ],
+   "pips": [
+    [
+     "R17C2_C5",
+     "R17C2_H02E0101"
+    ]
+   ],
+   "pos": [
+    477,
+    2304
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
+    "R18C2_A6_SLICE",
+    "R18C2_A6"
+   ],
+   "pips": [
+    [
+     "R18C2_A6_SLICE",
+     "R18C2_A6"
+    ]
+   ],
+   "pos": [
+    520,
+    2272
+   ],
+   "invert": true,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
+    "R18C38_H06E0200",
+    "R18C38_H06E0206"
+   ],
+   "pips": [
+    [
+     "R18C38_H06E0200",
+     "R18C38_H06E0206"
+    ]
+   ],
+   "pos": [
+    499,
+    586
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
+    "R19C2_V06S0200",
+    "R19C2_F4"
+   ],
+   "pips": [
+    [
+     "R19C2_V06S0200",
+     "R19C2_F4"
+    ]
+   ],
+   "pos": [
+    539,
+    2295
+   ],
+   "invert": true,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
+    "R19C38_H06E0200",
+    "R19C38_H06E0206"
+   ],
+   "pips": [
+    [
+     "R19C38_H06E0200",
+     "R19C38_H06E0206"
+    ]
+   ],
+   "pos": [
+    528,
+    586
+   ],
+   "invert": false,
+   "source": "campaign32"
   },
   {
    "pip": [
@@ -1836,6 +1998,24 @@
   },
   {
    "pip": [
+    "R21C2_C4_SLICE",
+    "R21C2_C4"
+   ],
+   "pips": [
+    [
+     "R21C2_C4_SLICE",
+     "R21C2_C4"
+    ]
+   ],
+   "pos": [
+    607,
+    2284
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R22C16_A5_SLICE",
     "R22C16_A5"
    ],
@@ -1926,6 +2106,42 @@
   },
   {
    "pip": [
+    "R22C2_C5",
+    "R22C2_H02W0002"
+   ],
+   "pips": [
+    [
+     "R22C2_C5",
+     "R22C2_H02W0002"
+    ]
+   ],
+   "pos": [
+    622,
+    2305
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
+    "R22C2_C7_SLICE",
+    "R22C2_C7"
+   ],
+   "pips": [
+    [
+     "R22C2_C7_SLICE",
+     "R22C2_C7"
+    ]
+   ],
+   "pos": [
+    635,
+    2280
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R22C34_H06W0200",
     "R22C34_H06W0206"
    ],
@@ -1980,6 +2196,42 @@
   },
   {
    "pip": [
+    "R23C38_H06E0200",
+    "R23C38_H06E0206"
+   ],
+   "pips": [
+    [
+     "R23C38_H06E0200",
+     "R23C38_H06E0206"
+    ]
+   ],
+   "pos": [
+    644,
+    586
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
+    "R23C38_H06E0300",
+    "R23C38_H06E0206"
+   ],
+   "pips": [
+    [
+     "R23C38_H06E0300",
+     "R23C38_H06E0206"
+    ]
+   ],
+   "pos": [
+    644,
+    578
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R25C20_H06E0200",
     "R25C20_H06E0206"
    ],
@@ -2013,6 +2265,24 @@
    ],
    "invert": false,
    "source": "campaign_tool"
+  },
+  {
+   "pip": [
+    "R25C2_V06N0200",
+    "R25C2_F4"
+   ],
+   "pips": [
+    [
+     "R25C2_V06N0200",
+     "R25C2_F4"
+    ]
+   ],
+   "pos": [
+    702,
+    2309
+   ],
+   "invert": false,
+   "source": "campaign32"
   },
   {
    "pip": [
@@ -2067,6 +2337,24 @@
    ],
    "invert": false,
    "source": "R20C19_io_pass"
+  },
+  {
+   "pip": [
+    "R26C2_D6_SLICE",
+    "R26C2_D6"
+   ],
+   "pips": [
+    [
+     "R26C2_D6_SLICE",
+     "R26C2_D6"
+    ]
+   ],
+   "pos": [
+    733,
+    2335
+   ],
+   "invert": false,
+   "source": "campaign32"
   },
   {
    "pip": [
@@ -2139,6 +2427,24 @@
    ],
    "invert": true,
    "source": "R20C40_io_pass"
+  },
+  {
+   "pip": [
+    "R27C2_B6",
+    "R27C2_H02E0301"
+   ],
+   "pips": [
+    [
+     "R27C2_B6",
+     "R27C2_H02E0301"
+    ]
+   ],
+   "pos": [
+    777,
+    2302
+   ],
+   "invert": false,
+   "source": "campaign32"
   },
   {
    "pip": [
@@ -2682,6 +2988,24 @@
   },
   {
    "pip": [
+    "R32C2_B6_SLICE",
+    "R32C2_B6"
+   ],
+   "pips": [
+    [
+     "R32C2_B6_SLICE",
+     "R32C2_B6"
+    ]
+   ],
+   "pos": [
+    926,
+    2272
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R34C16_A5_SLICE",
     "R34C16_A5"
    ],
@@ -2769,6 +3093,24 @@
    ],
    "invert": false,
    "source": "R34C40_io_pass"
+  },
+  {
+   "pip": [
+    "R35C1_H02E0100",
+    "R35C1_V06S0106"
+   ],
+   "pips": [
+    [
+     "R35C1_H02E0100",
+     "R35C1_V06S0106"
+    ]
+   ],
+   "pos": [
+    994,
+    2335
+   ],
+   "invert": false,
+   "source": "campaign32"
   },
   {
    "pip": [
@@ -3330,6 +3672,24 @@
   },
   {
    "pip": [
+    "R4C2_B4_SLICE",
+    "R4C2_B4"
+   ],
+   "pips": [
+    [
+     "R4C2_B4_SLICE",
+     "R4C2_B4"
+    ]
+   ],
+   "pos": [
+    113,
+    2284
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R4C30_A5_SLICE",
     "R4C30_A5"
    ],
@@ -3690,6 +4050,24 @@
   },
   {
    "pip": [
+    "R6C2_C6_SLICE",
+    "R6C2_C6"
+   ],
+   "pips": [
+    [
+     "R6C2_C6_SLICE",
+     "R6C2_C6"
+    ]
+   ],
+   "pos": [
+    155,
+    2336
+   ],
+   "invert": false,
+   "source": "campaign32"
+  },
+  {
+   "pip": [
     "R7C24_V06S0000",
     "R7C24_V06S0006"
    ],
@@ -3741,6 +4119,24 @@
    ],
    "invert": false,
    "source": "R12C24_io_pass"
+  },
+  {
+   "pip": [
+    "R7C2_B6_SLICE",
+    "R7C2_B6"
+   ],
+   "pips": [
+    [
+     "R7C2_B6_SLICE",
+     "R7C2_B6"
+    ]
+   ],
+   "pos": [
+    200,
+    2276
+   ],
+   "invert": false,
+   "source": "campaign32"
   }
  ]
 }
