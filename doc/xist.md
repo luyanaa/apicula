@@ -242,6 +242,18 @@ The candidates are stored in `testdata/SL2-12E_pip_fuses_sample.json`.  They are
 a start, not a complete map; more routing-only variants are needed for the
 whole CIB and long-wire fabric.
 
+**Holdout validation**: 8 new pin variants (not used in the fit) predict all
+8 candidates **8/8**, including the inverted-polarity cases.
+
+`xist/program.py` applies the fuse table to a `.bit`:
+
+```bash
+python -m xist.program --base h0.bit --xpn h1.xpn \
+    --map xist/testdata/SL2-12E_pip_fuses_sample.json --out h0_from_h1.bit
+```
+
+Applying `h1`'s pips to `h0` makes all 8 candidate bits match `h1` (8/8).
+
 ## Chip database
 
 `xist/chipdb.py` builds a `nextpnr.himbaechel_dbgen.chip.Chip`:

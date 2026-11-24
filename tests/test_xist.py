@@ -333,3 +333,20 @@ def test_fusemap_correlate(tmp_path):
     assert len(matches) == 1
     assert matches[0]["pos"] == [5, 5]
     assert matches[0]["pips"] == [["R1C2_B", "R1C2_A"]]
+
+
+def test_program_pip_fuses():
+    from xist.program import program
+    bs = make_bs(rows=10, cols=10)
+    fm = [{"pip": ["A", "B"], "pos": [2, 3], "invert": False},
+          {"pip": ["C", "D"], "pos": [4, 5], "invert": True}]
+    n = program(bs, {("A", "B")}, fm)
+    assert n == 2
+    assert bs.rows[2][3] == "1"      # present, normal polarity
+    assert bs.rows[4][5] == "1"      # absent, inverted polarity
+    program(bs, {("A", "B"), ("C", "D")}, fm)
+    assert bs.rows[2][3] == "1"      # present
+    assert bs.rows[4][5] == "0"      # present, inverted
+    program(bs, set(), fm)
+    assert bs.rows[2][3] == "0"      # absent
+    assert bs.rows[4][5] == "1"      # absent, inverted
