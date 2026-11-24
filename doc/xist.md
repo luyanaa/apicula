@@ -24,7 +24,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/bbalint.py` | **verified**: dangling label / push-pop checker |
 | `xist/bbasm.py` | **verified**: Python bbasm; produced a valid chipdb blob (magic/version/width/height checked) |
 | routing graph | **bring-up**: complete CIB + long-wire mesh; arbitrary designs route |
-| pip -> fuse map | **complete for CIB/long-wire**: vendor BFD data, 2668 arcs / 1976 long-wire across 22 CIB tile types (`SL2-12E_bfd_profiles.json`); PLC validated on 305 bitstreams |
+| pip -> fuse map | **complete for CIB/long-wire**: vendor BFD data, 3315 arcs / 1976 long-wire across 56 routing tile types in 28 profiles (`SL2-12E_bfd_profiles.json`); validated on 305 PLC + 331 edge-tile bitstream instances |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
 | `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for arbitrary LUT/DFF/ALU/MUX/IO designs on the bring-up graph; vendor fuse map / bitstream TODO |
@@ -282,22 +282,49 @@ Complete PLC (the CIB tile type):
 arcs 2500 (1920 touching a long wire), fuses 1392, routing fuses 1128
 ```
 
-Profiles cover the whole 29x48 CIB family (PLC, CIB_CFG*, CIB_DSP*, CIB_EBR*),
-22 tile types with 2668 distinct arcs, 1976 of them long-wire:
+Profiles cover every 29-row routing tile type: the 2-column centre tiles, the
+29x48 CIB family (PLC, CIB_CFG*, CIB_DSP*, CIB_EBR*) and the 29x59 edge/PIC
+types (PIC_L*, PIC_R*, LLC5PIC, LRC5PIC, ULC0, URC1_NO_DTR, CIB_EBR*_END*).
+Tile types with an identical arc->fuse map share one profile:
 
 ```
-testdata/SL2-12E_bfd_profiles.json   (4 profiles, compact)
-testdata/SL2-12E_bfd_PLC.json        (PLC in detail)
+testdata/SL2-12E_bfd_profiles.json   28 profiles, 56 tile types
+                                     3315 distinct arcs, 1976 long-wire
+testdata/SL2-12E_bfd_PLC.json        PLC in detail (2500 arcs)
 ```
 
-**Validation**: the BFD equations were evaluated for 305 routed `io_pass`
-bitstreams (slices locked at 15 tile locations) and compared with the vendor
-bitstream.  All routing-fuse predictions match:
+The 59-column profiles add 157 arcs that the 48-column CIB family does not
+have (clock/PLL and junction arcs); they add no new long-wire names, so the
+long-wire union stays at 1976.  The 2-column centre profiles add 490 non-long
+arcs.
+
+**Validation**: the BFD equations were evaluated for routed `io_pass`
+bitstreams (slices locked at many tile locations) and compared with the vendor
+bitstream.
+
+48-column PLC tiles (305 instances):
 
 ```
-designs checked 305, perfect 305
-344040 fuse predictions, 344040 matches (100.000%), 7516 predicted set
+designs 305 perfect 305
+positions 344040 match 344040 (100.000%) predicted-one 7516
 ```
+
+59-column edge tiles (the mapping is per tile column; the bit column base is
+2375 for tile column 1 and 60 for tile column 49):
+
+```
+--validate-column 1  -> designs 178 perfect 178
+                        206124/206124 (100.000%)
+--validate-column 49 -> designs 153 perfect 152
+                        177170/177174 (99.998%)
+```
+
+The single tc-49 outlier has 4 wrong bits and is the one sampled tile that uses
+a different 59-column profile; per-location profile selection removes it.  The
+48-column non-PLC CIB types (CIB_CFG/CIB_DSP/CIB_EBR at EBR/D/CTEST locations)
+were checked with the same rule and agree on 4220979/4228402 bits (99.82%);
+their profiles share most routing-fuse positions, so profile choice, not the
+row/column mapping, accounts for the residual.
 
 `xist/program.py` can write them:
 
@@ -319,10 +346,11 @@ set (98.7%).  The other 11 are same-track reversal pairs (`V02N0400` ->
 `V02S0401`) that act as wire aliases; the corpus also contains 103 `J*` wires
 invented by the nextpnr bring-up model, which have no vendor fuse.
 
-The 59-column PIC/LLC/ULC tile types have their own wider Ram grid; they are
-parsed but not part of the exported CIB profiles.  Fuses whose equation mixes
-`config()`/`property()` with `arcval()` depend on slice configuration and are
-not driven by the arc-only writer.
+Tile columns 0 and 50 have no bitstream columns of their own: their I/O cells
+are configured through the neighbouring 59-column block (hence the base for
+those columns is absent).  Fuses whose equation mixes `config()`/`property()`
+with `arcval()` depend on slice configuration and are not driven by the
+arc-only writer.
 
 **Holdout validation**: 8 new pin variants (not used in the fit) predict all
 8 candidates **8/8**, including the inverted-polarity cases.

@@ -73,19 +73,26 @@ def program_relative(bs: Bitstream, pips: set[tuple[str, str]],
     return n
 
 
-def used_arcs(path: str | Path, tile_row: int, tile_col: int) -> set[tuple[str, str]]:
+def used_arcs(path: str | Path, tile_row: int, tile_col: int,
+              tile=None) -> set[tuple[str, str]]:
     """Tile-local routing arcs from an XPN, oriented as in the BFD.
 
     The BFD equation is ``fuse = arcval(source, destination)``.  The XPN route
     line is ``destination.source``; ``xist.xpn`` stores it as ``(source,
     destination)``, so the BFD arc for a pip is ``(dst_local, src_local)``.
+
+    XPN wires may use the BFD node aliases (``R26C1_JA2`` for the canonical
+    ``A2``), so pass *tile* to translate them through ``tile.aliases``.
     """
     prefix = f"R{tile_row}C{tile_col}_"
+    alias = tile.aliases if tile is not None else {}
     used = set()
     for sig in parse_xpn(path).values():
         for src, dst in sig.route:
             if src.startswith(prefix) and dst.startswith(prefix):
-                used.add((wire_local(dst), wire_local(src)))
+                a = wire_local(dst)
+                b = wire_local(src)
+                used.add((alias.get(a, a), alias.get(b, b)))
     return used
 
 
@@ -110,7 +117,7 @@ def program_routing(bs: Bitstream, xpn_path: str | Path, tile, cal,
     reproduces the vendor bitstream for the routing region (validated end to
     end, see :mod:`xist.bfdmap`).
     """
-    used = used_arcs(xpn_path, tile_row, tile_col)
+    used = used_arcs(xpn_path, tile_row, tile_col, tile)
     n = 0
     for arcs, positions in routing_equations(tile).values():
         val = not arcs.isdisjoint(used)

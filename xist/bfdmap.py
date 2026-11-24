@@ -132,17 +132,18 @@ def _profile_key(tile: BfdTile) -> str:
 
 
 def export_profiles(tiles: dict[str, BfdTile], cal: Calibration,
-                    out: Path, min_cols: int = 48, max_cols: int = 48) -> dict:
-    """Export one routing table per distinct 29-row CIB profile.
+                    out: Path, min_cols: int = 2) -> dict:
+    """Export one routing table per distinct 29-row routing profile.
 
     Tile types with identical arc->fuse maps share a profile, so the complete
     CIB/long-wire map fits in a handful of tables instead of one per type.
-    Only the 29x48 CIB family (PLC, CIB_CFG*, CIB_DSP*, CIB_EBR*) is included;
-    the 59-column PIC/LLC/ULC tiles use a wider Ram grid and are not exported.
+    All 29-row routing types are included: the 2-column centre tiles, the
+    48-column CIB family (PLC, CIB_CFG*, CIB_DSP*, CIB_EBR*), and the 59-column
+    edge/PIC/LLC/ULC types.  The 6-row CFG/PIC stubs are not CIB fabric.
     """
     groups: dict[str, list[str]] = {}
     for name, t in sorted(tiles.items()):
-        if t.rows != TILE_ROWS or not (min_cols <= t.cols <= max_cols):
+        if t.rows != TILE_ROWS or t.cols < min_cols:
             continue
         if not t.arc_set():
             continue
@@ -165,10 +166,12 @@ def export_profiles(tiles: dict[str, BfdTile], cal: Calibration,
     data = {
         "device": "SL2-12E-8F256C",
         "source": "vendor BFD dump ('bfd.dumpbfd), parsed by xist.bfd",
-        "note": ("Complete routing fuse map for the 29-row CIB tile types. "
-                 "Tile types with identical maps share a profile.  Bit "
-                 "coordinates use column_base from SL2-12E_bitcol_base.json "
-                 "(validated on PLC only)."),
+        "note": ("Complete routing fuse map for every 29-row routing tile "
+                 "type (centre, 48-column CIB, 59-column edge/PIC).  Tile types "
+                 "with identical maps share a profile.  Bit coordinates use "
+                 "column_base from SL2-12E_bitcol_base.json; PLC (48-col) and "
+                 "tile columns 1/49 (59-col) are measured, the rest follow the "
+                 "same row/column rule."),
         "row_rule": "bit_row = 29 * (tile_row - 1) + ram_row",
         "col_rule": "bit_col = column_base[tile_col] - ram_col",
         "profiles": profiles,
@@ -184,17 +187,20 @@ def export_profiles(tiles: dict[str, BfdTile], cal: Calibration,
 
 def validate_dir(workdir: str | Path, tiles: dict[str, BfdTile],
                  cal: Calibration, tile_type: str = "PLC",
-                 limit: int = 0) -> dict:
+                 limit: int = 0, column: int | None = None) -> dict:
     """Check BFD routing-fuse predictions against vendor bitstreams.
 
-    *workdir* must contain paired ``R<row>C<col>_*.xpn`` / ``.bit`` files.
-    Returns counts of designs and fuse-bit matches.
+    *workdir* must contain paired ``.xpn`` / ``.bit`` files.  If the name
+    encodes a location (``R<row>C<col>_*.xpn``), only that tile is checked;
+    otherwise every tile that has route pips is checked (use *column* to
+    restrict to one tile column).
     """
     import glob
     import os
     import re
     from .bitstream import Bitstream
     from .program import routing_equations, used_arcs
+    from .xpn import parse_xpn, wire_local, wire_tile
 
     tile = tiles[tile_type]
     req = routing_equations(tile)
@@ -203,30 +209,54 @@ def validate_dir(workdir: str | Path, tiles: dict[str, BfdTile],
     total = match = pred1 = 0
     for xpn in sorted(glob.glob(str(Path(workdir) / "*.xpn"))):
         bit = xpn[:-4] + ".bit"
-        m = re.match(r"R(\d+)C(\d+)_", os.path.basename(xpn))
-        if not m or not os.path.exists(bit):
+        if not os.path.exists(bit):
             continue
-        tr, tc = int(m.group(1)), int(m.group(2))
-        if tc not in cal.column_base:
+        name = os.path.basename(xpn)
+        m = re.match(r"R(\d+)C(\d+)_", name)
+        per: dict[tuple[int, int], set] = {}
+        for sig in parse_xpn(xpn).values():
+            for src, dst in sig.route:
+                ta, tb = wire_tile(src), wire_tile(dst)
+                if ta and ta == tb:
+                    per.setdefault(ta, set()).add(
+                        (wire_local(dst), wire_local(src)))
+        if m:
+            key = (int(m.group(1)), int(m.group(2)))
+            targets = {key: per[key]} if key in per else {}
+        elif column is not None:
+            # unlabelled XPN: use the route itself, restricted to a column
+            targets = per
+        else:
             continue
-        if limit and designs >= limit:
-            break
-        used = used_arcs(xpn, tr, tc)
+        if not targets:
+            continue
         bs = Bitstream.read(bit)
-        designs += 1
-        bad = 0
-        for arcs, positions in req.values():
-            val = not arcs.isdisjoint(used)
-            for (rr, rc) in positions:
-                br, bc = cal.bit(tr, tc, rr, rc)
-                total += 1
-                if val:
-                    pred1 += 1
-                if bs.rows[br][bc] == ("1" if val else "0"):
-                    match += 1
-                else:
-                    bad += 1
-        perfect += (bad == 0)
+        for (tr, tc), pairs in sorted(targets.items()):
+            if tc not in cal.column_base:
+                continue
+            if column is not None and tc != column:
+                continue
+            if limit and designs >= limit:
+                break
+            used = used_arcs(xpn, tr, tc, tile)
+            if not used:
+                continue
+            designs += 1
+            bad = 0
+            for arcs, positions in req.values():
+                val = not arcs.isdisjoint(used)
+                for (rr, rc) in positions:
+                    br, bc = cal.bit(tr, tc, rr, rc)
+                    if not (0 <= br < bs.nrows and 0 <= bc < bs.ncols):
+                        continue
+                    total += 1
+                    if val:
+                        pred1 += 1
+                    if bs.rows[br][bc] == ("1" if val else "0"):
+                        match += 1
+                    else:
+                        bad += 1
+            perfect += (bad == 0)
     return dict(designs=designs, perfect=perfect, positions=total,
                 match=match, predicted_one=pred1)
 
@@ -245,6 +275,8 @@ def main(argv=None) -> int:
                     help="export one table per distinct CIB profile")
     ap.add_argument("--validate", nargs="+", default=None,
                     help="one or more directories of paired .xpn/.bit files")
+    ap.add_argument("--validate-column", type=int, default=None,
+                    help="only validate tiles in this tile column")
     args = ap.parse_args(argv)
     tiles = parse(args.bfd)
     if args.calibration:
@@ -265,7 +297,8 @@ def main(argv=None) -> int:
     if args.validate:
         agg = dict(designs=0, perfect=0, positions=0, match=0, predicted_one=0)
         for d in args.validate:
-            r = validate_dir(d, tiles, cal, args.tile)
+            r = validate_dir(d, tiles, cal, args.tile,
+                             column=args.validate_column)
             for k in agg:
                 agg[k] += r[k]
         pct = 100.0 * agg["match"] / agg["positions"] if agg["positions"] else 0.0

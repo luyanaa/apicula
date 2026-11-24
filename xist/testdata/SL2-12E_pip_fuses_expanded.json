@@ -1,5 +1,5 @@
 {
- "note": "Fuzz-derived pip->fuse candidates (routing-only pin variants, fit/holdout). Kept as an independent validation set for the complete map. The complete CIB/long-wire routing fuse map is extracted from the vendor BFD ('bfd.dumpbfd); see SL2-12E_bfd_profiles.json (22 tile types, 2668 arcs, 1976 long-wire) and SL2-12E_bfd_PLC.json (PLC: 2500 arcs, 1392 fuses).",
+ "note": "Fuzz-derived pip->fuse candidates (routing-only pin variants, fit/holdout). Kept as an independent validation set for the complete map. The complete CIB/long-wire routing fuse map is extracted from the vendor BFD ('bfd.dumpbfd); see SL2-12E_bfd_profiles.json (28 profiles, 56 routing tile types, 3315 arcs, 1976 long-wire) and SL2-12E_bfd_PLC.json.",
  "device": "SL2-12E-8F256C",
  "candidates": 231,
  "locations": 15,
@@ -4144,10 +4144,11 @@
   "plc_arcs": 2500,
   "plc_fuses": 1392,
   "plc_routing_fuses": 1128,
-  "cib_tile_types": 22,
-  "cib_arcs_union": 2668,
+  "cib_tile_types": 56,
+  "cib_arcs_union": 3315,
   "long_wire_arcs_union": 1976,
   "bit_calibration": "xist/testdata/SL2-12E_bitcol_base.json",
-  "validation": "305 routed bitstreams: 344040/344040 routing fuse bits match"
+  "validation": "305 PLC instances: 344040/344040 routing bits; 331 59-column edge instances: 383294/383298",
+  "profiles": 28
  }
 }

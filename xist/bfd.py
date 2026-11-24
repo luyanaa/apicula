@@ -49,6 +49,7 @@ class BfdTile:
     ram: dict[int, list[str]] = field(default_factory=dict)
     equations: dict[str, str] = field(default_factory=dict)
     nodes: list[str] = field(default_factory=list)
+    aliases: dict[str, str] = field(default_factory=dict)
     sites: dict[str, int] = field(default_factory=dict)
 
     def fuse_positions(self, fuse: str) -> list[tuple[int, int]]:
@@ -130,7 +131,14 @@ def parse(path: str | Path) -> dict[str, BfdTile]:
             if s in ("Sites", "Nodes"):
                 items, i = block(i + 1)
                 if s == "Nodes":
-                    tile.nodes = items
+                    for it in items:
+                        if "=" in it:
+                            canon, alias = (x.strip() for x in it.split("=", 1))
+                            tile.aliases[alias] = canon
+                            if canon not in tile.nodes:
+                                tile.nodes.append(canon)
+                        elif it not in tile.nodes:
+                            tile.nodes.append(it)
                 else:
                     for it in items:
                         mm = re.match(r"(\S+)\s+Row=(\d+)", it)

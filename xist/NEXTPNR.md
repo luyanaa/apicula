@@ -43,15 +43,19 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   (`python -m xist.cli tiles ...`) or an equivalence-class study.
 * DFF / PIO / EBR / DSP fuse maps.
 * Routing fuse map (pip -> bits): **complete for the CIB/long-wire network**
-  from the vendor BFD (`'bfd.dumpbfd`): 2668 arcs (1976 long-wire) over the 22
-  CIB tile types in `testdata/SL2-12E_bfd_profiles.json`, with PLC detail in
-  `testdata/SL2-12E_bfd_PLC.json` (2500 arcs, 1392 fuses, 1128 routing fuses).
-  Bit coordinates come from `xist/bfdmap.py` + `SL2-12E_bitcol_base.json` and
-  were validated on 305 routed bitstreams (344040/344040 fuse bits match).
-  `xist/program.py` (`program_routing`) writes them from an XPN.
-  The 59-column PIC/LLC/ULC tile variants are parsed but not exported, and
-  fuses whose equation mixes `config()` with `arcval()` still need the config
-  model.
+  from the vendor BFD (`'bfd.dumpbfd`): 3315 arcs (1976 long-wire) over 56
+  routing tile types in 28 profiles (`testdata/SL2-12E_bfd_profiles.json`).
+  That includes the 2-column centre tiles, the 29x48 CIB family and the 29x59
+  edge/PIC types; PLC detail is in `testdata/SL2-12E_bfd_PLC.json` (2500 arcs,
+  1392 fuses, 1128 routing fuses).
+  Bit coordinates come from `xist/bfdmap.py` + `SL2-12E_bitcol_base.json`.
+  Validated on 305 PLC tile instances (344040/344040 bits) and on 331
+  edge-tile instances at 59-column tile columns 1 and 49 (383294/383298 bits,
+  one outlier using a different edge profile).  `xist/program.py`
+  (`program_routing`) writes them from an XPN.
+  Tile columns 0 and 50 have no bitstream columns of their own (their I/O cells
+  are configured through the neighbouring 59-column block), and fuses whose
+  equation mixes `config()` with `arcval()` still need the config model.
   The fuzz campaign (`xist/campaign.py`, 231 holdout-validated candidates)
   remains as an independent cross-check: 128/135 of its vendor-named pips are
   predicted exactly by the BFD map.

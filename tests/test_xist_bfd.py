@@ -26,8 +26,8 @@ Tile "TINY" Rows=2 Columns=3 Rams=6 Nodes=4
    Nodes
    {
       A,
-      B,
-      C = A,
+      B = JB,
+      C,
       D
    }
 
@@ -73,6 +73,7 @@ def test_bfd_parse(tmp_path):
     assert t.ram == {0: ["F0", "F1", "F2"], 1: ["F3", "F4", "F5"]}
     assert t.sites == {"SLICE_A": 1, "SLICE_B": 0}
     assert len(t.nodes) == 4          # alias line inside Nodes must not leak
+    assert t.aliases == {"JB": "B"}
     assert len(t.equations) == 6
     assert t.fuse_positions("F4") == [(1, 1)]
 
@@ -128,11 +129,14 @@ def test_calibration_predicts_fuzz_candidate():
 
 def test_profiles_complete():
     d = json.loads((TESTDATA / "SL2-12E_bfd_profiles.json").read_text())
-    assert set(d["profiles"]) == {"PLC", "CIB_CFG", "CIB_DSP", "CIB_EBR"}
+    assert {"PLC", "CIB_CFG", "CIB_DSP", "CIB_EBR"} <= set(d["profiles"])
+    assert {"PIC_L5", "PIC_R5", "URC1_NO_DTR", "LLC5PIC",
+            "LRC5PIC"} <= set(d["profiles"])
+    assert len(d["profiles"]) == 28
     cov = d["coverage"]
-    assert cov["arcs_union"] == 2668
+    assert cov["arcs_union"] == 3315
     assert cov["long_wire_arcs_union"] == 1976
-    assert len(cov["tile_types"]) == 22
+    assert len(cov["tile_types"]) == 56
 
 
 def _make_bs(rows=40, cols=120):
@@ -157,8 +161,9 @@ def test_program_routing(tmp_path):
     xpn = tmp_path / "x.xpn"
     xpn.write_text(
         'signal "x"\n{\n   (a, p)\n   route\n   {\n'
-        "      R2C5_A.R2C5_B;\n   }\n}\n")
-    assert used_arcs(xpn, 2, 5) == {("A", "B")}
+        "      R2C5_A.R2C5_JB;\n   }\n}\n")
+    assert used_arcs(xpn, 2, 5) == {("A", "JB")}       # no alias map
+    assert used_arcs(xpn, 2, 5, tile) == {("A", "B")}  # alias JB -> B
 
     bs = _make_bs()
     n = program_routing(bs, xpn, tile, cal, 2, 5)

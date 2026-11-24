@@ -1,6 +1,6 @@
 {
  "device": "SL2-12E-8F256C",
- "note": "Absolute bitstream column base for a tile column: bit_col = column_base[tile_col] - ram_col.  Derived from the slice-D block origin in SL2-12E_columns.json + 44, then corrected per tile column against 305 routed vendor bitstreams (PLC tile).  Only tile columns with a measured slice origin are listed.",
+ "note": "Absolute bitstream column base for a tile column: bit_col = column_base[tile_col] - ram_col.  For 48-column tiles the base is the slice-D block origin + 44, corrected per tile column against 305 routed vendor bitstreams (PLC).  For the 59-column edge tiles, tile columns 1 and 49 are measured directly against 551 and 1086 routed instances; columns 0 and 50 have no bitstream columns of their own (their I/O cells are configured by the neighbouring 59-column block).",
  "row_rule": "bit_row = 29 * (tile_row - 1) + ram_row",
  "col_rule": "bit_col = column_base[tile_col] - ram_col",
  "column_delta": {
@@ -13,7 +13,12 @@
   "42": -1,
   "48": -1
  },
+ "measured_extra": {
+  "1": 2375,
+  "49": 60
+ },
  "column_base": {
+  "1": 2375,
   "2": 2316,
   "3": 2271,
   "4": 2220,
@@ -60,6 +65,7 @@
   "45": 253,
   "46": 205,
   "47": 157,
-  "48": 108
+  "48": 108,
+  "49": 60
  }
 }
