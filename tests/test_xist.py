@@ -278,3 +278,35 @@ def test_xpn_last_route_entry_with_semicolon(tmp_path):
         ("R39C19_PADDOC_PIO", "R39C19_JPADDOC"),
         ("R38C19_JA2", "R38C19_V02N0701"),
     ]
+
+
+def test_converter_mux_and_alu():
+    from xist.nextpnr_json import convert
+    mod = {"ports": {}, "netnames": {}, "cells": {
+        "m": {"type": "MUX2_LUT5", "parameters": {}, "attributes": {},
+              "connections": {"I0": [2], "I1": [3], "S0": [4], "O": [5]}},
+        "a": {"type": "ALU", "parameters": {"ALU_MODE": "10"}, "attributes": {},
+              "connections": {"I0": [6], "I1": [7], "I3": [8], "CIN": [9],
+                              "SUM": [10], "COUT": [11]}},
+    }}
+    out = convert(mod)
+    cell = out["cells"]["m"]
+    assert cell["type"] == "LUT4"
+    assert len(cell["parameters"]["INIT"]) == 16
+    alu = out["cells"]["a"]
+    assert alu["type"] == "ALU"
+    assert alu["port_directions"]["SUM"] == "output"
+    assert alu["port_directions"]["I0"] == "input"
+
+
+def test_cib_chipdb_without_xpn():
+    from xist.device import parse_udev_report
+    from xist.chipdb import build_chip
+    base = Path(__file__).resolve().parents[1] / "xist/testdata"
+    rep = parse_udev_report((base / "SL2-12E-8F256C_udev.txt").read_text())
+    chip = build_chip("SL2-12E-8F256C", rep, xpn_paths=[])
+    tt = chip.chip.tile_types[chip.chip.tile_type_idx["PLC"]]
+    assert tt.has_wire("CIB0") and tt.has_wire("CIB31")
+    assert tt.has_wire("V06N0000")
+    idx = {v: k for k, v in tt.strs.strs.items()}
+    assert any(idx[b.name.index] == "ALU0" for b in tt.bels)

@@ -53,6 +53,10 @@ class XistChip:
 
 def _add_plc_tile_type(chip: Chip, name: str) -> None:
     tt = chip.create_tile_type(name)
+    # clock/reset are shared by all four slices; create them exactly once so the
+    # bel pins and the CIB pips refer to the same wire index
+    for w in ("CLK", "LSR"):
+        tt.create_wire(w)
     for s in range(4):
         n0, n1 = 2 * s, 2 * s + 1
         # Wire names follow the vendor XPN conventions: slice A uses F0/F1,
@@ -62,7 +66,7 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
         for w in (f"A{n0}", f"B{n0}", f"C{n0}", f"D{n0}",
                   f"A{n1}", f"B{n1}", f"C{n1}", f"D{n1}",
                   f"F{n0}", f"F{n1}", f"Q{n0}", f"Q{n1}",
-                  f"DI{n0}", f"DI{n1}", "CLK", "LSR"):
+                  f"DI{n0}", f"DI{n1}"):
             tt.create_wire(w)
         l0 = tt.create_bel(f"LUT{n0}", "LUT4", 4 * s)
         l1 = tt.create_bel(f"LUT{n1}", "LUT4", 4 * s + 1)
@@ -77,6 +81,18 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
             tt.add_bel_pin(dff, "D", f"DI{n}", PinType.INPUT)
             tt.add_bel_pin(dff, "CLK", "CLK", PinType.INPUT)
             tt.add_bel_pin(dff, "Q", f"Q{n}", PinType.OUTPUT)
+        # Carry/math cell: one ALU per slice, sharing the slice data inputs.
+        for w in (f"CIN{n0}", f"COUT{n0}", f"SUM{n0}",
+                  f"AI0_{n0}", f"AI1_{n0}", f"AI2_{n0}", f"AI3_{n0}"):
+            tt.create_wire(w)
+        alu = tt.create_bel(f"ALU{n0}", "ALU", 16 + s)
+        tt.add_bel_pin(alu, "I0", f"AI0_{n0}", PinType.INPUT)
+        tt.add_bel_pin(alu, "I1", f"AI1_{n0}", PinType.INPUT)
+        tt.add_bel_pin(alu, "I2", f"AI2_{n0}", PinType.INPUT)
+        tt.add_bel_pin(alu, "I3", f"AI3_{n0}", PinType.INPUT)
+        tt.add_bel_pin(alu, "CIN", f"CIN{n0}", PinType.INPUT)
+        tt.add_bel_pin(alu, "COUT", f"COUT{n0}", PinType.OUTPUT)
+        tt.add_bel_pin(alu, "SUM", f"SUM{n0}", PinType.OUTPUT)
         # LUT output can feed the slice DFF and the fabric output
         tt.create_pip(f"F{n0}", f"DI{n0}")
         tt.create_pip(f"F{n1}", f"DI{n1}")
@@ -158,6 +174,10 @@ def build_chip(part: str, report: DeviceReport,
         for c, tok in enumerate(row):
             chip.set_tile_type(c, r, tok if tok and tok != "." else "EMPTY")
 
+    # Seed a complete set of long-wire names so every tile can reach its
+    # neighbours even when the XPN corpus does not cover that tile.
+    _seed_long_wires(chip)
+
     # collect observed wires first, so pips/nodes can refer to them
     edges = list(routing_edges(xpn_paths or []))
     local_wires: dict[str, set[str]] = {}  # tile type -> local wire names
@@ -218,6 +238,7 @@ def build_chip(part: str, report: DeviceReport,
     # V06S0300 at R20 connects to V06S0302 at R22, ... V06S0306 at R26.
     # The XPN only lists the endpoints, so rebuild the chains as nodes.
     _connect_long_wires(chip, report)
+    _add_cib(chip)
 
     # package pins -> PIO bels via the vendor site string (PL12C, PT13B, ...)
     if pkg_pins:
@@ -240,6 +261,57 @@ def build_chip(part: str, report: DeviceReport,
                            f"PIO_{slot}", pin.get("desc", "").strip(), bank)
 
     return XistChip(chip, part, family_for(part), luts, columns)
+
+
+def _seed_long_wires(chip: Chip) -> None:
+    """Create a standard long-wire set in every non-empty tile type."""
+    dirs = {"V": "NS", "H": "EW"}
+    for tt in chip.tile_types:
+        name = tt.strs.strs
+        # skip the EMPTY type (no wires at all)
+        if tt.type_name.index not in range(0, 0) and len(tt.wires) == 0:
+            continue
+        for kind, ds in dirs.items():
+            for d in ds:
+                for ln in (2, 6):
+                    for track in range(4):
+                        for seg in range(0, ln + 1):
+                            w = f"{kind}{ln:02d}{d}{track:02d}{seg:02d}"
+                            if not tt.has_wire(w):
+                                tt.create_wire(w)
+
+
+def _add_cib(chip: Chip) -> None:
+    """Add a per-tile crossbar between bel pins, local wires and long wires.
+
+    This is a bring-up routing model: every source can reach every sink in the
+    tile through one of eight CIB bus wires.  It is intentionally generic and
+    does not yet encode the vendor fuse muxes.
+    """
+    src_re = re.compile(r"^(?:F\d+|Q\d+|SUM\d+|COUT\d+|JDI[A-D]|JPADDI[A-D]_PIO|"
+                        r"[VH]\d{2}[NSEW]\d{2}\d{2}|.*_OUT)$")
+    snk_re = re.compile(r"^(?:[A-D]\d|AI\d+_\d+|DI\d+|CIN\d+|CLK|LSR|PADDO[A-D]_PIO|JPADDO[A-D]|"
+                        r"[VH]\d{2}[NSEW]\d{2}\d{2}|.*_IN)$")
+    for tt in chip.tile_types:
+        idx = {v: k for k, v in tt.strs.strs.items()}
+        names = [idx[w.name.index] for w in tt.wires]
+        bus = [f"CIB{i}" for i in range(32)]
+        for b in bus:
+            if not tt.has_wire(b):
+                tt.create_wire(b)
+        seen = set()
+        def pip(a, b):
+            if (a, b) in seen:
+                return
+            seen.add((a, b))
+            tt.create_pip(a, b)
+        for n in names:
+            if src_re.match(n):
+                for b in bus:
+                    pip(n, b)
+            if snk_re.match(n):
+                for b in bus:
+                    pip(b, n)
 
 
 def _package_name(part: str) -> str:
@@ -268,7 +340,7 @@ def pad_location(site: str, rows: int = 40, cols: int = 51) -> tuple[int, int, s
 
 
 _LONG_RE = re.compile(r"^([VH])(\d{2})([NSEW])(\d{2})(\d{2})$")
-_DIR_STEP = {"N": (-2, 0), "S": (2, 0), "E": (0, 2), "W": (0, -2)}
+_DIR_STEP = {"N": (-1, 0), "S": (1, 0), "E": (0, 1), "W": (0, -1)}
 
 
 def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
@@ -308,8 +380,8 @@ def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
                 kind, ln, d, track, seg = m.groups()
                 ln, seg = int(ln), int(seg)
                 dr, dc = _DIR_STEP[d]
-                for s in range(0, ln + 1, 2):
-                    step = (s - seg) // 2
+                for s in range(0, ln + 1):
+                    step = s - seg
                     tr, tc = r + dr * step, c + dc * step
                     if not (0 <= tr < report.rows and 0 <= tc < report.cols):
                         continue

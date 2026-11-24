@@ -1,5 +1,6 @@
 X(LUT4)
 X(DFF)
+X(ALU)
 X(PIO)
 X(IBUF)
 X(OBUF)

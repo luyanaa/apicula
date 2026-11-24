@@ -26,7 +26,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | routing graph | **partial**: only pips observed in the XPN corpus |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
-| `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for `a&b->o` on SL2-12E; full routing graph / bitstream TODO |
+| `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for arbitrary LUT/DFF/ALU/MUX/IO designs on the bring-up graph; vendor fuse map / bitstream TODO |
 
 ## Quick start
 
@@ -188,6 +188,32 @@ Two bring-up concessions are visible in the demo:
 * `nextpnr_json.py` rotates the LUT inputs by one (logical `I0/I1` → bel
   `I[1]/I[2]`) because the vendor packer maps this design to slice ports B/C.
   The real mapping is per-slice and still needs calibration.
+
+## Generic routing (bring-up graph)
+
+The current database does **not** need a matching XPN.  Each tile gets a
+32-wire CIB crossbar (bel pins, PIO pads, ALU and long wires) and a complete
+1-row V/H long-wire mesh; nextpnr can then route arbitrary LUT/DFF/ALU/MUX/IO
+designs:
+
+```bash
+python -m xist.demo_any my_design.v
+#   Info: Routing ...
+#   Info: Routing complete.
+#   Info: Program finished normally.
+```
+
+Verified in this session (all `Routing complete` / rc=0):
+
+```
+io_pass  xbar4  wide_eq  mux4  mux8  lut_chain  fanout8  shift8
+dff_chain  counter8  adder4  add16  lfsr8  pipe4  cmp8  mult4
+```
+
+This graph is a **bring-up model**, not the vendor fuse map: the CIB is a full
+crossbar, and the long-wire mesh uses 1-row segments (the vendor uses 2-row
+segments and specific mux fuses).  It proves the bels/packer/placer/router
+integration; the bitstream writer still needs the real pip->fuse map.
 
 ## Chip database
 

@@ -11,13 +11,13 @@ Gowin chipdb.  A minimal `xist` uarch now lives in
 * chipdb loads (51x40, 2040 tile instances, 43 tile types, 196 pads).
 * a 6-cell design (LUT4 + DFF + 4 PIO) **places successfully** with
   `--no-route`; HeAP/SA finish normally and a checksum is printed.
-* `--route` **succeeds** for the demo design (`a & b -> o`) when the database
-  is built from the matching `io.xpn`: nextpnr reports `Routing complete` and
-  `Program finished normally`.  The demo is `python -m xist.demo_route`.
-* This is not yet a general router: the graph comes from the same XPN as the
-  design, the LUT input pins are rotated for this slice (B/C), and mixing
-  multiple XPN corpora can collide on shared wires (e.g. `JA2` can only belong
-  to one nextpnr node).  The full CIB/track-switch graph is the next step.
+* `--route` **succeeds for arbitrary LUT/DFF/ALU/MUX/IO designs** on the
+  bring-up graph: `python -m xist.demo_any design.v` reports `Routing complete`
+  and `Program finished normally`.  Verified with 16 designs including adders,
+  counters, comparators, multipliers, muxes, LFSRs and pipelines.
+* The graph is a bring-up model: a 32-wire per-tile CIB crossbar plus a
+  complete 1-row long-wire mesh, no vendor XPN needed.  It is not the vendor
+  fuse map yet; the bitstream writer still needs the real pip -> bits mapping.
 
 ## Database contents
 

@@ -43,10 +43,7 @@ def convert(module: dict) -> dict:
             for k in range(4):
                 key = f"I{k}"
                 if key in conn:
-                    # The vendor packer maps the first logical inputs to the
-                    # middle slice ports (B/C) for this fabric; rotate by one so
-                    # the XPN routes (a -> C6, b -> B6) line up.
-                    new_conn[f"I[{(k + 1) % 4}]"] = conn[key]
+                    new_conn[f"I[{k}]"] = conn[key]
             if "F" in conn:
                 new_conn["F"] = conn["F"]
             dirs = {k: "input" for k in new_conn if k.startswith("I[")}
@@ -73,6 +70,34 @@ def convert(module: dict) -> dict:
             cells[name] = {"type": "PIO", "parameters": {}, "attributes": attrs,
                            "connections": {"PADDO": conn["I"], "PAD": conn["O"]},
                            "port_directions": {"PADDO": "input", "PAD": "output"}}
+        elif typ in ("MUX2_LUT5", "MUX2_LUT6", "MUX2_LUT7", "MUX2_LUT8"):
+            # O = S0 ? I1 : I0  ->  LUT4 with I[0]=I0, I[1]=I1, I[2]=S0
+            init = 0
+            for d in (0, 1):
+                for sbit in (0, 1):
+                    for i1 in (0, 1):
+                        for i0 in (0, 1):
+                            bit = i1 if sbit else i0
+                            init |= bit << (d * 8 + sbit * 4 + i1 * 2 + i0)
+            new_conn = {}
+            for src, dst in (("I0", "I[0]"), ("I1", "I[1]"), ("S0", "I[2]")):
+                if src in conn:
+                    new_conn[dst] = conn[src]
+            if "O" in conn:
+                new_conn["F"] = conn["O"]
+            cells[name] = {"type": "LUT4",
+                           "parameters": {"INIT": format(init, "016b")},
+                           "attributes": attrs, "connections": new_conn,
+                           "port_directions": {k: "input" for k in new_conn
+                                               if k.startswith("I[")} |
+                                              ({"F": "output"} if "F" in new_conn else {})}
+        elif typ == "ALU":
+            dirs = {"I0": "input", "I1": "input", "I2": "input", "I3": "input",
+                    "CIN": "input", "SUM": "output", "COUT": "output"}
+            cells[name] = {"type": "ALU", "parameters": params,
+                           "attributes": attrs,
+                           "connections": {k: v for k, v in conn.items() if k in dirs},
+                           "port_directions": {k: dirs[k] for k in conn if k in dirs}}
         elif typ in ("VCC", "GND") or typ.startswith("$specify"):
             continue
         else:
