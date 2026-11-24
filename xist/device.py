@@ -151,7 +151,7 @@ def parse_pkg_report(text: str) -> list[dict]:
     ``IO = A4, site = ..., tile = ..., bank = 1, desc = ...``."""
     out = []
     pat = re.compile(
-        r"IO = (.*?), site = (.*?), tile = (.*?), bank = (.*?), desc = (.*)$")
+        r"IO = (.*?), site = (.*?), tile = (.*?), bank = (.*?), desc =\s*(.*)$")
     for line in text.splitlines():
         m = pat.search(line.strip())
         if m:

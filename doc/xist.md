@@ -18,9 +18,9 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/device.py` | **verified**: `dv_list.xml`, `'udev.report`, `'udev.pkg.report` |
 | `xist/hqfpga.py` | **verified**: batch flow runner |
 | `xist/probe.py` | **verified**: locked-slice LUT probes + placed-netlist parser |
-| `xist/lutmap.py` | **verified** for SL2-12E slice A; B/C/D calibrated by the same tool |
+| `xist/lutmap.py` | **verified** per tile; the LUT minterm permutation is tile-position dependent (see below) |
 | `xist/xpn.py` | **verified**: XPN signal/route parser |
-| `xist/chipdb.py` | **skeleton**: tiles/bels + observed routing; emits `.bba` |
+| `xist/chipdb.py` | **skeleton**: 2040 tiles, 16 bels/PLC, 196 package pads, observed routing; emits `.bba` |
 | `xist/bbalint.py` | **verified**: dangling label / push-pop checker |
 | `xist/bbasm.py` | **verified**: Python bbasm; produced a valid chipdb blob (magic/version/width/height checked) |
 | routing graph | **partial**: only pips observed in the XPN corpus |
@@ -38,10 +38,16 @@ python -m xist.cli udev --part SL2-12E-8F256C --out /tmp/xist
 python -m xist.cli calibrate --part SL2-12E-8F256C --loc R10C10A \
     --out /tmp/xist --save /tmp/xist/lut_R10C10A.json
 
-# 3. emit a himbaechel chipdb (routing from any routed .xpn corpus)
+# 3. calibrate tile column origins (slice D, 2 probes per column)
+python -m xist.cli columns --part SL2-12E-8F256C --row 10 \
+    --save /tmp/xist/columns.json
+
+# 4. emit a himbaechel chipdb (routing from any routed .xpn corpus)
 python -m xist.cli chipdb --part SL2-12E-8F256C \
     --udev /tmp/xist/SL2-12E-8F256C_arch.txt \
-    --lut /tmp/xist/lut_R10C10A.json \
+    --pkg  /tmp/xist/SL2-12E-8F256C_pkg.txt \
+    --lut  /tmp/xist/lut_R10C10A.json \
+    --columns /tmp/xist/columns.json \
     --xpn design.xpn \
     --out-bba /tmp/xist/xist-SL2-12E.bba \
     --out-meta /tmp/xist/xist-SL2-12E.json
@@ -115,9 +121,29 @@ need a two-LUT probe to confirm.
 The full maps are in `xist/testdata/SL2-12E_lut_{A,B,C,D}.json` and combined in
 `SL2-12E_lut_all.json`.
 
-What is *not* yet known: the mapping from tile column index to the bitstream
-column origin (the pitch alternates between 47 and 48 bits).  A column sweep
-(slice D probe at every C, ~50 runs) will produce that table.
+The **block position** is regular:
+
+```
+row  = 29 * tile_row + row_rel
+col  = column_origin[tile_col] + {"D":0, "C":8, "B":24, "A":32}[slice] + col_rel
+```
+
+`SL2-12E_columns.json` is a complete sweep of the tile columns (C2..C48 are PLC;
+C0/C1/C49/C50 have no slice).  `xist.lutmap.slot_for()` implements the formula
+and reproduces the C10 maps exactly.
+
+**Important caveat: the minterm permutation is position dependent.**  The
+calibration at R10C10D gives the D-slice layout `(7,5,3,1,0,2,4,6)`; the same
+probe at R20C19D gives `(7,5,6,4,3,1,2,0)`.  The vendor packer maps the logical
+LUT inputs A/B/C/D to physical LUT inputs differently depending on tile position,
+and the F1 block offset also changes (R10C10D: same block as F0; R20C19D:
++31 columns).  Therefore a single calibration cannot be extrapolated across the
+whole chip.  The tools support calibrating any tile (`calibrate --loc ...`);
+building the full table needs one calibration per PLC tile (1504), which is a
+parallel/overnight fuzz job, or a study of the mirroring pattern.
+
+The reference-tile maps in `testdata/` are verified examples, not a device-wide
+lookup.
 
 ## Chip database
 

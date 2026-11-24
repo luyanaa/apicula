@@ -122,3 +122,64 @@ def save(cal: LutCalibration, path: str | Path) -> None:
 
 def load(path: str | Path) -> LutCalibration:
     return LutCalibration.from_json(json.loads(Path(path).read_text()))
+
+
+def calibrate_columns(part: str, tile_row: int, workdir: str | Path,
+                      cols=None, probe_a: int = 1 << 11, probe_b: int = 1 << 12,
+                      timeout: int = 900, verbose: bool = False) -> dict:
+    """Calibrate tile column -> bitstream column origin.
+
+    Uses slice D (the leftmost LUT block in a PLC tile).  Two probes whose
+    minterms are at offsets 0 and 6 of the calibrated D layout give the block
+    origin as the minimum changed column.
+    """
+    workdir = Path(workdir)
+    cols = list(range(51) if cols is None else cols)
+    band = (ROW_PITCH * tile_row - 8, ROW_PITCH * tile_row)
+    out: dict[int, int | None] = {}
+    for c in cols:
+        loc = f"R{tile_row}C{c}D"
+        try:
+            a = run_lut_probe(part, workdir, [probe_a], f"col{c:02d}a", loc=loc,
+                              timeout=timeout)
+            b = run_lut_probe(part, workdir, [probe_b], f"col{c:02d}b", loc=loc,
+                              timeout=timeout)
+            d = diff_probes(a, b, band)
+            pos = [(r, cc) for r, cs in d.items() for cc in cs]
+            out[c] = min(cc for _, cc in pos) if pos else None
+        except Exception as e:  # noqa: BLE001 - vendor errors are data
+            out[c] = None
+            if verbose:
+                print(f"  C{c}: {e}")
+        if verbose:
+            print(f"  C{c}: origin={out[c]}")
+    return out
+
+
+# Column offset of each slice's LUT block inside a PLC tile, relative to slice D.
+SLICE_BLOCK_OFFSET = {"D": 0, "C": 8, "B": 24, "A": 32}
+
+
+def slot_for(cal: LutCalibration, tile_row: int, tile_col: int,
+             columns: dict[int, int | None]) -> LutSlot:
+    """Translate a calibration done at one tile to any tile.
+
+    ``columns`` maps tile column -> slice-D block origin (see
+    :func:`calibrate_columns`).  The per-slice minterm layout is reused as-is;
+    only the row and column origins move.
+
+    WARNING: the minterm permutation is **not** constant across the chip; this
+    helper is exact only when *cal* was taken at the same tile position (or the
+    vendor happens to use the same input mapping there).  Calibrate each tile
+    before relying on it.
+    """
+    ref_row = _tile_row(cal.loc)
+    ref_slice = cal.loc[-1]
+    ref_origin = cal.block_col - SLICE_BLOCK_OFFSET[ref_slice]
+    rel = [(r - ROW_PITCH * ref_row, c - cal.block_col)
+           for r, c in (cal.minterms[i] for i in range(16))]
+    origin = columns.get(tile_col) if isinstance(columns, dict) else None
+    if origin is None:
+        raise KeyError(f"no column origin for tile column {tile_col}")
+    base = origin + SLICE_BLOCK_OFFSET[ref_slice]
+    return LutSlot(tuple((ROW_PITCH * tile_row + dr, base + dc) for dr, dc in rel))

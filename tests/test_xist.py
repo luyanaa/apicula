@@ -121,7 +121,8 @@ def test_chipdb_smoke(tmp_path):
 def test_bbasm_smoke(tmp_path):
     from xist.bbasm import assemble, dump_chip_info
     bba = tmp_path / "t.bba"
-    bba.write_text("""push blob
+    slices = "".join("slice data 1\n" for _ in range(6))
+    bba.write_text(f"""push blob
 ref info
 label data
 u32 1
@@ -133,14 +134,16 @@ u32 3
 str |xist|
 str |test|
 str |py|
-slice data 1
-slice data 1
+{slices}ref data
+u32 0
 pop
 """)
     data = assemble(bba.read_text())
     info = dump_chip_info(data)
     assert info["magic"] == "0xca7ca7"
     assert (info["version"], info["width"], info["height"]) == (7, 4, 3)
+    assert (info["uarch"], info["name"], info["generator"]) == ("xist", "test", "py")
+    assert info["tile_insts"] == 1 and info["packages"] == 1
 
 
 def test_real_udev_grid():
@@ -159,3 +162,40 @@ def test_lut_maps():
         cal = load(base / f"SL2-12E_lut_{s}.json")
         assert len(cal.slot().minterms) == 16
         assert len(set(cal.slot().minterms)) == 16
+
+
+def test_package_mapping():
+    from xist.device import parse_pkg_report
+    from xist.chipdb import pad_location
+    p = Path(__file__).resolve().parents[1] / "xist/testdata/SL2-12E-8F256C_pkg.txt"
+    pins = parse_pkg_report(p.read_text())
+    assert len(pins) == 196
+    assert all(pad_location(x["tile"]) for x in pins)
+    assert pad_location("PL12C") == (12, 0, "C")
+    assert pad_location("PB48D") == (39, 48, "D")
+
+
+def test_slot_for_other_tiles():
+    from xist.lutmap import load, slot_for
+    base = Path(__file__).resolve().parents[1] / "xist/testdata"
+    cal = load(base / "SL2-12E_lut_A.json")
+    s = slot_for(cal, 10, 10, {10: 1888})
+    assert s.minterms == tuple(cal.minterms[i] for i in range(16))
+    # C11 is 48 bits to the left (measured independently)
+    s11 = slot_for(cal, 10, 11, {11: 1840})
+    assert s11.minterms[0] == (288, 1872)
+
+
+def test_real_lut_codec():
+    from xist.lutmap import load, slot_for
+    base = Path(__file__).resolve().parents[1] / "xist/testdata"
+    cal = load(base / "SL2-12E_lut_A.json")
+    slot = slot_for(cal, 10, 10, {10: 1888})
+    bs = make_bs(rows=400, cols=3000)
+    for init in (0x0001, 0x6996, 0xC0C0, 0xFFFF):
+        encode_lut_init(bs, init, slot)
+        assert decode_lut_init(bs, slot) == init
+    # all 16 fuses are inside the bitmap and distinct
+    coords = [(r, c) for r, c, _ in slot.coords()]
+    assert len(set(coords)) == 16
+    assert all(0 <= r < 400 and 0 <= c < 3000 for r, c in coords)

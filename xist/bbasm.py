@@ -142,7 +142,25 @@ def dump_chip_info(data: bytes) -> dict:
     """
     info_off = struct.unpack_from("<i", data, 0)[0]
     magic, version, width, height = struct.unpack_from("<IIII", data, info_off)
+    p = info_off + 16
+
+    def sref(pos: int) -> str:
+        rel = struct.unpack_from("<i", data, pos)[0]
+        start = pos + rel
+        end = data.index(b"\x00", start)
+        return data[start:end].decode()
+
+    uarch = sref(p); p += 4
+    name = sref(p); p += 4
+    generator = sref(p); p += 4
+    counts = {}
+    for key in ("tile_types", "tile_insts", "node_shapes", "tile_shapes",
+                "packages", "speed_grades"):
+        rel = struct.unpack_from("<i", data, p)[0]
+        counts[key] = struct.unpack_from("<I", data, p + 4)[0]
+        p += 8
     return dict(magic=hex(magic), version=version, width=width, height=height,
+                uarch=uarch, name=name, generator=generator, **counts,
                 info_offset=info_off, size=len(data))
 
 

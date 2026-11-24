@@ -16,6 +16,7 @@ production chipdb still needs systematic pip fuzzing.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -33,6 +34,7 @@ class XistChip:
     part: str
     family: str
     luts: dict[str, LutCalibration] = field(default_factory=dict)
+    columns: dict[int, int | None] | None = None
 
     def write_bba(self, path: str | Path) -> None:
         self.chip.write_bba(str(path))
@@ -43,6 +45,8 @@ class XistChip:
             "part": self.part,
             "family": self.family,
             "lut": {k: v.to_json() for k, v in self.luts.items()},
+            "column_origin": ({str(k): v for k, v in self.columns.items()}
+                              if self.columns else None),
         }
         Path(path).write_text(json.dumps(meta, indent=2) + "\n")
 
@@ -82,7 +86,7 @@ def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
         tt.create_wire(f"IO{s}_I")
         tt.create_wire(f"IO{s}_O")
         tt.create_wire(f"IO{s}_OE")
-        b = tt.create_bel(f"PIO{s}", "PIO", s)
+        b = tt.create_bel(f"PIO_{SLICE_LETTERS[s]}", "PIO", s)
         tt.add_bel_pin(b, "PAD", f"IO{s}_PAD", PinType.INOUT)
         tt.add_bel_pin(b, "I", f"IO{s}_I", PinType.OUTPUT)
         tt.add_bel_pin(b, "O", f"IO{s}_O", PinType.INPUT)
@@ -114,7 +118,8 @@ def _tile_kind(token: str) -> str:
 def build_chip(part: str, report: DeviceReport,
                luts: dict[str, LutCalibration] | None = None,
                xpn_paths: list[str] | None = None,
-               pkg_pins: list[dict] | None = None) -> XistChip:
+               pkg_pins: list[dict] | None = None,
+               columns: dict[int, int | None] | None = None) -> XistChip:
     chip = Chip("xist", part, report.cols, report.rows)
     chip.set_speed_grades(["8"])
     luts = luts or {}
@@ -192,8 +197,49 @@ def build_chip(part: str, report: DeviceReport,
             chip.add_node([NodeWire(cs, rs, ls), NodeWire(cd, rd, ld)])
             used_in_node.update((a, b))
 
-    # package pins -> PIO bels (best effort; site names are vendor specific)
-    for pin in (pkg_pins or []):
-        pass  # pin/site mapping needs the 'udev site grid; added in a later pass
+    # package pins -> PIO bels via the vendor site string (PL12C, PT13B, ...)
+    if pkg_pins:
+        pkg = chip.create_package(_package_name(part))
+        for pin in pkg_pins:
+            loc = pad_location(pin.get("tile", ""))
+            if loc is None:
+                continue
+            row, col, slot = loc
+            if not (0 <= row < report.rows and 0 <= col < report.cols):
+                continue
+            tok = report.tiles[row][col]
+            if not tok or tok == ".":
+                continue
+            try:
+                bank = int(pin.get("bank", "0") or 0)
+            except ValueError:
+                bank = 0
+            pkg.create_pad(pin.get("io", ""), f"X{col}Y{row}",
+                           f"PIO_{slot}", pin.get("desc", "").strip(), bank)
 
-    return XistChip(chip, part, family_for(part), luts)
+    return XistChip(chip, part, family_for(part), luts, columns)
+
+
+def _package_name(part: str) -> str:
+    # SL2-12E-8F256C -> F256
+    tail = part.rsplit("-", 1)[-1]
+    tail = tail.lstrip("0123456789")
+    return tail[:-1] if tail and tail[-1] in "CI" else tail
+
+
+def pad_location(site: str, rows: int = 40, cols: int = 51) -> tuple[int, int, str] | None:
+    """Decode a vendor pad site such as PL12C / PT13B / PR5A / PB7D.
+
+    Returns (row, col, slot) for the 51x40 SL2-12E grid.
+    """
+    m = re.match(r"^P([LRTB])(\d+)([A-D])$", site.strip())
+    if not m:
+        return None
+    side, num, slot = m.group(1), int(m.group(2)), m.group(3)
+    if side == "L":
+        return num, 0, slot
+    if side == "R":
+        return num, cols - 1, slot
+    if side == "T":
+        return 0, num, slot
+    return rows - 1, num, slot

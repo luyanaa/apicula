@@ -15,7 +15,6 @@ import sys
 from pathlib import Path
 
 from . import hqfpga
-from .bitstream import Bitstream, LutSlot
 from .chipdb import build_chip
 from .device import family_for, parse_pkg_report, parse_udev_report
 from .lutmap import calibrate_slice, load as load_cal, save as save_cal
@@ -72,14 +71,39 @@ def cmd_calibrate(args) -> int:
     return 0
 
 
+def cmd_columns(args) -> int:
+    from .lutmap import calibrate_columns
+    cols = range(*[int(x) for x in args.cols.split(":")]) if args.cols else None
+    res = calibrate_columns(args.part, args.row, args.out, cols=cols,
+                            verbose=args.verbose)
+    good = {k: v for k, v in res.items() if v is not None}
+    print(f"{len(good)}/{len(res)} columns calibrated")
+    if good:
+        ks = sorted(good)
+        print(f"  C{ks[0]}={good[ks[0]]} .. C{ks[-1]}={good[ks[-1]]}")
+    dest = Path(args.save or Path(args.out) / "columns.json")
+    dest.write_text(json.dumps(res, indent=2) + "\n")
+    print(f"saved {dest}")
+    return 0
+
+
 def cmd_chipdb(args) -> int:
     rep = parse_udev_report(Path(args.udev).read_text(encoding="utf-8"))
     luts = {}
     for p in args.lut or []:
         cal = load_cal(p)
         luts[cal.loc[-1]] = cal
+    pkg_pins = []
+    if args.pkg:
+        pkg_pins = parse_pkg_report(Path(args.pkg).read_text(
+            encoding="utf-8", errors="replace"))
+    columns = None
+    if args.columns:
+        columns = {int(k): v for k, v in
+                   json.loads(Path(args.columns).read_text()).items()}
     chip = build_chip(args.part, rep, luts=luts,
-                      xpn_paths=args.xpn or [], pkg_pins=[])
+                      xpn_paths=args.xpn or [], pkg_pins=pkg_pins,
+                      columns=columns)
     out = Path(args.out_bba)
     out.parent.mkdir(parents=True, exist_ok=True)
     chip.write_bba(out)
@@ -115,11 +139,22 @@ def main(argv=None) -> int:
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(func=cmd_calibrate)
 
+    p = sub.add_parser("columns", help="calibrate tile column origins")
+    p.add_argument("--part", required=True)
+    p.add_argument("--row", type=int, default=10)
+    p.add_argument("--cols", default=None, help="start:stop (python range)")
+    p.add_argument("--out", default=".")
+    p.add_argument("--save", default=None)
+    p.add_argument("--verbose", action="store_true")
+    p.set_defaults(func=cmd_columns)
+
     p = sub.add_parser("chipdb", help="emit a himbaechel .bba chipdb")
     p.add_argument("--part", required=True)
     p.add_argument("--udev", required=True, help="'udev.report text file")
     p.add_argument("--lut", action="append", help="LUT calibration JSON")
     p.add_argument("--xpn", action="append", help="routed XPN file(s)")
+    p.add_argument("--pkg", help="'udev.pkg.report text file")
+    p.add_argument("--columns", help="column origin JSON")
     p.add_argument("--out-bba", required=True)
     p.add_argument("--out-meta", default=None)
     p.set_defaults(func=cmd_chipdb)

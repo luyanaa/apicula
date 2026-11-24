@@ -1,0 +1,197 @@
+SL2-12E
+IO = D4, site = PIO, tile = PL2A, bank = 1, desc =  
+IO = E5, site = PIO, tile = PL2B, bank = 1, desc =  
+IO = F3, site = PIO, tile = PL2C, bank = 1, desc =  
+IO = B1, site = PIO, tile = PL2D, bank = 1, desc =  
+IO = C2, site = PIO, tile = PL5A, bank = 1, desc =  
+IO = C1, site = PIO, tile = PL5B, bank = 1, desc =  
+IO = D2, site = PIO, tile = PL5C, bank = 1, desc =  
+IO = D1, site = PIO, tile = PL5D, bank = 1, desc =  
+IO = F5, site = PIO, tile = PL7A, bank = 1, desc =  
+IO = G5, site = PIO, tile = PL7B, bank = 1, desc =  
+IO = F2, site = PIO, tile = PL7C, bank = 1, desc =  
+IO = F1, site = PIO, tile = PL7D, bank = 1, desc =  
+IO = G2, site = PIO, tile = PL9A, bank = 1, desc =  
+IO = G1, site = PIO, tile = PL9B, bank = 1, desc =  
+IO = L5, site = PIO, tile = PL9C, bank = 1, desc =  
+IO = N4, site = PIO, tile = PL9D, bank = 1, desc =  
+IO = H2, site = PIO, tile = PL12B, bank = 1, desc =  
+IO = E2, site = PIO, tile = PL12C, bank = 1, desc = PCLK1T_0 
+IO = E1, site = PIO, tile = PL12D, bank = 1, desc = PCLK1T_1/PCLK1C_0 
+IO = F4, site = PIO, tile = PL15A, bank = 0, desc =  
+IO = H1, site = PIO, tile = PL15B, bank = 1, desc =  
+IO = J3, site = PIO, tile = PL15D, bank = 0, desc =  
+IO = H3, site = PIO, tile = PL18A, bank = 1, desc =  
+IO = J5, site = PIO, tile = PL18B, bank = 1, desc =  
+IO = J4, site = PIO, tile = PL18C, bank = 1, desc =  
+IO = H4, site = PIO, tile = PL18D, bank = 1, desc =  
+IO = M2, site = PIO, tile = PL26A, bank = 2, desc = PCLK2T_0 
+IO = M1, site = PIO, tile = PL26B, bank = 2, desc = PCLK2T_1/PCLK2C_0 
+IO = J2, site = PIO, tile = PL26C, bank = 2, desc =  
+IO = J1, site = PIO, tile = PL26D, bank = 2, desc =  
+IO = K6, site = PIO, tile = PL29A, bank = 2, desc = LPLL_IN_T 
+IO = L6, site = PIO, tile = PL29B, bank = 2, desc = LPLL_IN_C 
+IO = J6, site = PIO, tile = PL29C, bank = 2, desc =  
+IO = K2, site = PIO, tile = PL30A, bank = 2, desc = LPLL_FB_T 
+IO = K1, site = PIO, tile = PL30B, bank = 2, desc = LPLL_FB_C 
+IO = L2, site = PIO, tile = PL32A, bank = 2, desc =  
+IO = L1, site = PIO, tile = PL32B, bank = 2, desc =  
+IO = N2, site = PIO, tile = PL32C, bank = 2, desc =  
+IO = N1, site = PIO, tile = PL32D, bank = 2, desc =  
+IO = K5, site = PIO, tile = PL34A, bank = 2, desc =  
+IO = L4, site = PIO, tile = PL34B, bank = 2, desc =  
+IO = R1, site = PIO, tile = PL34C, bank = 2, desc =  
+IO = P2, site = PIO, tile = PL37A, bank = 2, desc =  
+IO = P1, site = PIO, tile = PL37B, bank = 2, desc =  
+IO = L3, site = PIO, tile = PL37C, bank = 2, desc =  
+IO = C15, site = PIO, tile = PR2A, bank = 6, desc =  
+IO = C16, site = PIO, tile = PR2B, bank = 6, desc =  
+IO = F14, site = PIO, tile = PR2C, bank = 6, desc =  
+IO = G11, site = PIO, tile = PR2D, bank = 6, desc =  
+IO = D15, site = PIO, tile = PR5A, bank = 6, desc =  
+IO = D16, site = PIO, tile = PR5B, bank = 6, desc =  
+IO = B16, site = PIO, tile = PR7A, bank = 6, desc =  
+IO = F13, site = PIO, tile = PR7B, bank = 6, desc =  
+IO = F12, site = PIO, tile = PR7C, bank = 6, desc =  
+IO = D13, site = PIO, tile = PR7D, bank = 6, desc =  
+IO = F15, site = PIO, tile = PR9A, bank = 6, desc =  
+IO = F16, site = PIO, tile = PR9B, bank = 6, desc =  
+IO = H15, site = PIO, tile = PR9C, bank = 6, desc =  
+IO = H16, site = PIO, tile = PR9D, bank = 6, desc =  
+IO = E15, site = PIO, tile = PR12A, bank = 6, desc = PCLK6T_0 
+IO = E16, site = PIO, tile = PR12B, bank = 6, desc = PCLK6T_1/PCLK6C_0 
+IO = G15, site = PIO, tile = PR12C, bank = 6, desc =  
+IO = G16, site = PIO, tile = PR12D, bank = 6, desc =  
+IO = H13, site = PIO, tile = PR15B, bank = 6, desc =  
+IO = H12, site = PIO, tile = PR15C, bank = 6, desc =  
+IO = G12, site = PIO, tile = PR15D, bank = 6, desc =  
+IO = M15, site = PIO, tile = PR18A, bank = 5, desc = PCLK5_0 
+IO = M16, site = PIO, tile = PR18B, bank = 5, desc = PCLK5T_1/PCLK5C_0 
+IO = J12, site = PIO, tile = PR18C, bank = 5, desc =  
+IO = J14, site = PIO, tile = PR18D, bank = 5, desc =  
+IO = J15, site = PIO, tile = PR26A, bank = 5, desc = RPLL_IN_T 
+IO = J16, site = PIO, tile = PR26B, bank = 5, desc = RPLL_IN_C 
+IO = J13, site = PIO, tile = PR26C, bank = 5, desc =  
+IO = J11, site = PIO, tile = PR26D, bank = 5, desc =  
+IO = K15, site = PIO, tile = PR29A, bank = 5, desc = RPLL_FB_T 
+IO = K16, site = PIO, tile = PR29B, bank = 5, desc = RPLL_FB_C 
+IO = L15, site = PIO, tile = PR29C, bank = 5, desc =  
+IO = L16, site = PIO, tile = PR29D, bank = 5, desc =  
+IO = N15, site = PIO, tile = PR30A, bank = 5, desc =  
+IO = N16, site = PIO, tile = PR30B, bank = 5, desc =  
+IO = R16, site = PIO, tile = PR30C, bank = 5, desc =  
+IO = P16, site = PIO, tile = PR30D, bank = 5, desc =  
+IO = N14, site = PIO, tile = PR32A, bank = 5, desc =  
+IO = P15, site = PIO, tile = PR32B, bank = 5, desc =  
+IO = K11, site = PIO, tile = PR32C, bank = 5, desc =  
+IO = K12, site = PIO, tile = PR32D, bank = 5, desc =  
+IO = M12, site = PIO, tile = PR34A, bank = 5, desc =  
+IO = N13, site = PIO, tile = PR34B, bank = 5, desc =  
+IO = L12, site = PIO, tile = PR37A, bank = 5, desc =  
+IO = L13, site = PIO, tile = PR37B, bank = 5, desc =  
+IO = L14, site = PIO, tile = PR37C, bank = 5, desc =  
+IO = D3, site = PIO, tile = PT7A, bank = 8, desc =  
+IO = C3, site = PIO, tile = PT7B, bank = 8, desc =  
+IO = C6, site = PIO, tile = PT7C, bank = 8, desc =  
+IO = A5, site = PIO, tile = PT7D, bank = 8, desc =  
+IO = B3, site = PIO, tile = PT10A, bank = 8, desc =  
+IO = A3, site = PIO, tile = PT10B, bank = 8, desc =  
+IO = D6, site = PIO, tile = PT10C, bank = 8, desc =  
+IO = D5, site = PIO, tile = PT10D, bank = 8, desc =  
+IO = B4, site = PIO, tile = PT13A, bank = 8, desc =  
+IO = A4, site = PIO, tile = PT13B, bank = 8, desc =  
+IO = B5, site = PIO, tile = PT16A, bank = 8, desc =  
+IO = A2, site = PIO, tile = PT16B, bank = 8, desc =  
+IO = E6, site = PIO, tile = PT16C, bank = 8, desc =  
+IO = E7, site = PIO, tile = PT16D, bank = 8, desc =  
+IO = B6, site = PIO, tile = PT19A, bank = 8, desc =  
+IO = A6, site = PIO, tile = PT19B, bank = 8, desc =  
+IO = F7, site = PIO, tile = PT19C, bank = 8, desc =  
+IO = F6, site = PIO, tile = PT19D, bank = 8, desc =  
+IO = B7, site = PIO, tile = PT22A, bank = 8, desc =  
+IO = A7, site = PIO, tile = PT22B, bank = 8, desc =  
+IO = D8, site = PIO, tile = PT22C, bank = 8, desc =  
+IO = C8, site = PIO, tile = PT22D, bank = 8, desc =  
+IO = F8, site = PIO, tile = PT25A, bank = 8, desc =  
+IO = E8, site = PIO, tile = PT25B, bank = 8, desc =  
+IO = B8, site = PIO, tile = PT25C, bank = 8, desc = PCLK8T_0 
+IO = A8, site = PIO, tile = PT25D, bank = 8, desc = PCLK8C_0 
+IO = B9, site = PIO, tile = PT30A, bank = 7, desc =  
+IO = A9, site = PIO, tile = PT30B, bank = 7, desc =  
+IO = D9, site = PIO, tile = PT30C, bank = 7, desc = PCLK7T_0 
+IO = C9, site = PIO, tile = PT30D, bank = 7, desc = PCLK7C_0 
+IO = B10, site = PIO, tile = PT33A, bank = 7, desc =  
+IO = A10, site = PIO, tile = PT33B, bank = 7, desc =  
+IO = A15, site = PIO, tile = PT33C, bank = 7, desc =  
+IO = F10, site = PIO, tile = PT36A, bank = 7, desc =  
+IO = F11, site = PIO, tile = PT36B, bank = 7, desc =  
+IO = F9, site = PIO, tile = PT36C, bank = 7, desc =  
+IO = E9, site = PIO, tile = PT36D, bank = 7, desc =  
+IO = B11, site = PIO, tile = PT39A, bank = 7, desc =  
+IO = A11, site = PIO, tile = PT39B, bank = 7, desc =  
+IO = E10, site = PIO, tile = PT39C, bank = 7, desc =  
+IO = E11, site = PIO, tile = PT39D, bank = 7, desc =  
+IO = B12, site = PIO, tile = PT42A, bank = 7, desc =  
+IO = A12, site = PIO, tile = PT42B, bank = 7, desc =  
+IO = B14, site = PIO, tile = PT42C, bank = 7, desc =  
+IO = A14, site = PIO, tile = PT42D, bank = 7, desc =  
+IO = B13, site = PIO, tile = PT45A, bank = 7, desc = RPLL_OUT_T 
+IO = A13, site = PIO, tile = PT45B, bank = 7, desc = RPLL_OUT_B 
+IO = D12, site = PIO, tile = PT45C, bank = 7, desc =  
+IO = D11, site = PIO, tile = PT45D, bank = 7, desc =  
+IO = D14, site = PIO, tile = PT48A, bank = 7, desc =  
+IO = C14, site = PIO, tile = PT48B, bank = 7, desc =  
+IO = C11, site = PIO, tile = PT48C, bank = 7, desc =  
+IO = P6, site = PIO, tile = PB7C, bank = 3, desc =  
+IO = T2, site = PIO, tile = PB7D, bank = 3, desc =  
+IO = N3, site = PIO, tile = PB10A, bank = 3, desc =  
+IO = P3, site = PIO, tile = PB10B, bank = 3, desc =  
+IO = R3, site = PIO, tile = PB10C, bank = 3, desc =  
+IO = T3, site = PIO, tile = PB10D, bank = 3, desc =  
+IO = R4, site = PIO, tile = PB13A, bank = 3, desc = LPLL_OUT_T 
+IO = T4, site = PIO, tile = PB13B, bank = 3, desc = LPLL_OUT_C 
+IO = M6, site = PIO, tile = PB13C, bank = 3, desc =  
+IO = N5, site = PIO, tile = PB13D, bank = 3, desc =  
+IO = M7, site = PIO, tile = PB16A, bank = 3, desc =  
+IO = K8, site = PIO, tile = PB16B, bank = 3, desc =  
+IO = R5, site = PIO, tile = PB16C, bank = 3, desc =  
+IO = T5, site = PIO, tile = PB16D, bank = 3, desc =  
+IO = R6, site = PIO, tile = PB19A, bank = 3, desc =  
+IO = T6, site = PIO, tile = PB19B, bank = 3, desc =  
+IO = N6, site = PIO, tile = PB19C, bank = 3, desc =  
+IO = L7, site = PIO, tile = PB19D, bank = 3, desc =  
+IO = R7, site = PIO, tile = PB22A, bank = 3, desc =  
+IO = T7, site = PIO, tile = PB22B, bank = 3, desc =  
+IO = L8, site = PIO, tile = PB22C, bank = 3, desc =  
+IO = M8, site = PIO, tile = PB22D, bank = 3, desc =  
+IO = N8, site = PIO, tile = PB25A, bank = 3, desc = PCLK3T_0 
+IO = P8, site = PIO, tile = PB25B, bank = 3, desc = PCLK3C_0 
+IO = R8, site = PIO, tile = PB25C, bank = 3, desc =  
+IO = T8, site = PIO, tile = PB25D, bank = 3, desc =  
+IO = R9, site = PIO, tile = PB30A, bank = 4, desc = PCLK4T_0 
+IO = T9, site = PIO, tile = PB30B, bank = 4, desc = PCLK4C_0 
+IO = K9, site = PIO, tile = PB30C, bank = 4, desc =  
+IO = L9, site = PIO, tile = PB30D, bank = 4, desc =  
+IO = M9, site = PIO, tile = PB33A, bank = 4, desc =  
+IO = N9, site = PIO, tile = PB33B, bank = 4, desc =  
+IO = R10, site = PIO, tile = PB33C, bank = 4, desc =  
+IO = T10, site = PIO, tile = PB33D, bank = 4, desc =  
+IO = R11, site = PIO, tile = PB36A, bank = 4, desc =  
+IO = T11, site = PIO, tile = PB36B, bank = 4, desc =  
+IO = R12, site = PIO, tile = PB36C, bank = 4, desc =  
+IO = T12, site = PIO, tile = PB36D, bank = 4, desc =  
+IO = K10, site = PIO, tile = PB39A, bank = 4, desc =  
+IO = L10, site = PIO, tile = PB39B, bank = 4, desc =  
+IO = R13, site = PIO, tile = PB39C, bank = 4, desc =  
+IO = T13, site = PIO, tile = PB39D, bank = 4, desc =  
+IO = M10, site = PIO, tile = PB42A, bank = 4, desc =  
+IO = N11, site = PIO, tile = PB42B, bank = 4, desc =  
+IO = T14, site = PIO, tile = PB42C, bank = 4, desc =  
+IO = T15, site = PIO, tile = PB42D, bank = 4, desc =  
+IO = R14, site = PIO, tile = PB45A, bank = 4, desc =  
+IO = P14, site = PIO, tile = PB45C, bank = 4, desc =  
+IO = L11, site = PIO, tile = PB45D, bank = 4, desc =  
+IO = M11, site = PIO, tile = PB48A, bank = 4, desc =  
+IO = N12, site = PIO, tile = PB48B, bank = 4, desc =  
+IO = P11, site = PIO, tile = PB48C, bank = 4, desc =  
+IO = P9, site = PIO, tile = PB48D, bank = 4, desc =  
