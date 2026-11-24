@@ -258,3 +258,23 @@ def test_corpus_designs():
     from xist.corpus import DESIGNS
     assert len(DESIGNS) >= 8
     assert "lut_chain" in DESIGNS and "io_pass" in DESIGNS
+
+
+def test_xpn_last_route_entry_with_semicolon(tmp_path):
+    from xist.xpn import parse_xpn
+    p = tmp_path / "last.xpn"
+    p.write_text('''signal o_c
+{
+   signal-pins
+      (SLICE_0, F0),
+      ("o", PADDO);
+   route
+      R39C19_JPADDOC.R39C19_PADDOC_PIO,
+      R38C19_V02N0701.R38C19_JA2;
+}
+''')
+    sigs = parse_xpn(p)
+    assert sigs["o_c"].route == [
+        ("R39C19_PADDOC_PIO", "R39C19_JPADDOC"),
+        ("R38C19_JA2", "R38C19_V02N0701"),
+    ]

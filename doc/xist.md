@@ -26,7 +26,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | routing graph | **partial**: only pips observed in the XPN corpus |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
-| `nextpnr` uarch (`xist.cc`, packer, writer) | **bring-up**: loads the chipdb and places LUT4/DFF/PIO; routing/bitstream TODO |
+| `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for `a&b->o` on SL2-12E; full routing graph / bitstream TODO |
 
 ## Quick start
 
@@ -165,6 +165,29 @@ python -m xist.cli tiles --part SL2-12E-8F256C --rows 2:40 --cols 2:49 \
 ```
 
 Each worker gets its own directory, so the vendor tool instances do not clash.
+
+## Routed demo (a & b -> o)
+
+```bash
+python -m xist.demo_route
+```
+
+The demo runs Yosys → JSON conversion → chipdb from `testdata/io.xpn` →
+`nextpnr-himbaechel`.  Verified output:
+
+```
+Info: Routing 3 arcs.
+Info: Routing complete.
+Info: Program finished normally.
+routed nets with ROUTING: 6
+```
+
+Two bring-up concessions are visible in the demo:
+
+* the chipdb is built from the matching `io.xpn`, not a complete device graph;
+* `nextpnr_json.py` rotates the LUT inputs by one (logical `I0/I1` → bel
+  `I[1]/I[2]`) because the vendor packer maps this design to slice ports B/C.
+  The real mapping is per-slice and still needs calibration.
 
 ## Chip database
 

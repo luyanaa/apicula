@@ -13,7 +13,7 @@ from pathlib import Path
 
 _SIGNAL_RE = re.compile(r'signal\s+(?:"([^"]+)"|([^\s{]+))\s*\{', re.S)
 _PIN_RE = re.compile(r'\(\s*"?([^",]+)"?\s*,\s*([^)]+)\)')
-_ROUTE_LINE_RE = re.compile(r'^\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*,\s*$')
+_ROUTE_LINE_RE = re.compile(r'^\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*[,;]?\s*$')
 _TILE_RE = re.compile(r"^(R\d+C\d+)_(.+)$")
 
 

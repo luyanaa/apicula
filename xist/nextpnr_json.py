@@ -43,11 +43,13 @@ def convert(module: dict) -> dict:
             for k in range(4):
                 key = f"I{k}"
                 if key in conn:
-                    new_conn[f"I[{k}]"] = conn[key]
+                    # The vendor packer maps the first logical inputs to the
+                    # middle slice ports (B/C) for this fabric; rotate by one so
+                    # the XPN routes (a -> C6, b -> B6) line up.
+                    new_conn[f"I[{(k + 1) % 4}]"] = conn[key]
             if "F" in conn:
                 new_conn["F"] = conn["F"]
-            dirs = {f"I[{k}]": "input" for k in range(4)
-                    if f"I[{k}]" in new_conn}
+            dirs = {k: "input" for k in new_conn if k.startswith("I[")}
             if "F" in new_conn:
                 dirs["F"] = "output"
             cells[name] = {"type": "LUT4",
