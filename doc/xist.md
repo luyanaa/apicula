@@ -24,7 +24,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/bbalint.py` | **verified**: dangling label / push-pop checker |
 | `xist/bbasm.py` | **verified**: Python bbasm; produced a valid chipdb blob (magic/version/width/height checked) |
 | routing graph | **bring-up**: complete CIB + long-wire mesh; arbitrary designs route |
-| pip -> fuse map | **first sample**: 8 candidate fuses from 22 variants (`SL2-12E_pip_fuses_sample.json`) |
+| pip -> fuse map | **expanded**: 209 candidates (124 long-wire, 85 slice/CIP) across 31 tile locations (`SL2-12E_pip_fuses_expanded.json`) |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
 | `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for arbitrary LUT/DFF/ALU/MUX/IO designs on the bring-up graph; vendor fuse map / bitstream TODO |
@@ -238,9 +238,22 @@ unique exact matches 8
   ...
 ```
 
-The candidates are stored in `testdata/SL2-12E_pip_fuses_sample.json`.  They are
-a start, not a complete map; more routing-only variants are needed for the
-whole CIB and long-wire fabric.
+The first candidates are in `testdata/SL2-12E_pip_fuses_sample.json`; the
+expanded table (`SL2-12E_pip_fuses_expanded.json`) now has **209 candidates**
+(124 long-wire, 85 slice/CIP) from 31 tile locations.  Each location used
+12 pin variants with the slices locked, a 70/30 fit/holdout split and only
+holdout-clean candidates were merged.
+
+`xist/campaign.py` scales this to any tile list:
+
+```bash
+python -m xist.campaign --locations auto:1504 --variants 4 --jobs 8 \
+    --out pip_fuses.json
+```
+
+`auto:1504` selects all PLC tiles.  This is the remaining large campaign: the
+campaigns so far observed 6333 long-wire pips and mapped 124, so a literal
+full-chip map needs the full run (or decoding the vendor database).
 
 **Holdout validation**: 8 new pin variants (not used in the fit) predict all
 8 candidates **8/8**, including the inverted-polarity cases.

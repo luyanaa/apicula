@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -39,6 +40,36 @@ def program(bs: Bitstream, pips: set[tuple[str, str]], fusemap: list[dict]) -> i
         val = (not present) if entry.get("invert") else present
         _set(bs, r, c, val)
         n += 1
+    return n
+
+
+def program_relative(bs: Bitstream, pips: set[tuple[str, str]],
+                     relmap: list[dict], columns: dict) -> int:
+    """Program pips using tile-relative fuse entries (any tile)."""
+    index = {(e["a"], e["b"]): e for e in relmap}
+    n = 0
+    for a, b in pips:
+        ma = re.match(r"^R(\d+)C(\d+)_(.+)$", a)
+        mb = re.match(r"^R(\d+)C(\d+)_(.+)$", b)
+        m = ma or mb
+        if not m:
+            continue
+        r, col = int(m.group(1)), int(m.group(2))
+        la = ma.group(3) if ma else a
+        lb = mb.group(3) if mb else b
+        e = index.get((la, lb))
+        if not e:
+            continue
+        origin = columns.get(str(col)) or columns.get(col)
+        if origin is None:
+            continue
+        # pip is present by construction; inverted entries store 0
+        val = (not e["invert"])
+        br = 29 * r + e["rel"][0]
+        bc = origin + e["rel"][1]
+        if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+            _set(bs, br, bc, val)
+            n += 1
     return n
 
 

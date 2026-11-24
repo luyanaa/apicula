@@ -83,6 +83,46 @@ def correlate(bit_paths: list[str | Path], xpn_paths: list[str | Path],
     return out
 
 
+def relative_map(matches: list[dict], columns: dict) -> list[dict]:
+    """Convert absolute candidates into tile-relative pip fuse entries.
+
+    ``columns`` maps tile column -> bitstream column origin (slice D block).
+    The returned entry has local wire names and a (row, col) offset that can be
+    applied at any tile with the same local pip.
+    """
+    import re
+    groups: dict[tuple[str, str], list[tuple[int, int, bool]]] = defaultdict(list)
+
+    def split(w):
+        m = re.match(r"^R(\d+)C(\d+)_(.+)$", w)
+        return (int(m.group(1)), int(m.group(2)), m.group(3)) if m else None
+
+    for c in matches:
+        a, b = c["pip"]
+        t = split(a) or split(b)
+        if not t:
+            continue
+        r, col, _ = t
+        origin = columns.get(str(col)) or columns.get(col)
+        if origin is None:
+            continue
+        rel = (c["pos"][0] - 29 * r, c["pos"][1] - origin)
+        la = split(a)[2] if split(a) else a
+        lb = split(b)[2] if split(b) else b
+        groups[(la, lb)].append((rel[0], rel[1], bool(c.get("invert"))))
+
+    out = []
+    for (la, lb), vals in sorted(groups.items()):
+        # mode of the relative offsets (a pip type may occur at a tile edge
+        # with a different edge tile type; keep the most common)
+        counts = defaultdict(int)
+        for v in vals:
+            counts[v] += 1
+        (dr, dc, inv), _ = max(counts.items(), key=lambda kv: kv[1])
+        out.append(dict(a=la, b=lb, rel=[dr, dc], invert=inv, samples=len(vals)))
+    return out
+
+
 def main(argv=None) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="pip <-> bitstream correlation")

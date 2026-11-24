@@ -350,3 +350,21 @@ def test_program_pip_fuses():
     program(bs, set(), fm)
     assert bs.rows[2][3] == "0"      # absent
     assert bs.rows[4][5] == "1"      # absent, inverted
+
+
+def test_campaign_location_picker():
+    from xist.campaign import plc_locations
+    locs = plc_locations(5)
+    assert len(locs) == 5
+    assert all(x.startswith("R") and "C" in x for x in locs)
+
+
+def test_relative_fusemap():
+    from xist.fusemap import relative_map
+    matches = [
+        {"pip": ["R10C10_A6_SLICE", "R10C10_A6"], "pos": [286, 1888], "invert": False},
+        {"pip": ["R20C10_A6_SLICE", "R20C10_A6"], "pos": [576, 1888], "invert": False},
+    ]
+    rel = relative_map(matches, {"10": 1888})
+    assert rel[0]["a"] == "A6_SLICE" and rel[0]["b"] == "A6"
+    assert rel[0]["rel"] == [-4, 0]

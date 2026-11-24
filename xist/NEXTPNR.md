@@ -42,9 +42,11 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   known from `SL2-12E_columns.json`; the permutation needs a per-tile campaign
   (`python -m xist.cli tiles ...`) or an equivalence-class study.
 * DFF / PIO / EBR / DSP fuse maps.
-* Routing fuse map (pip -> bits): 8 candidate pips validated on a holdout set,
-  in `testdata/SL2-12E_pip_fuses_sample.json`; `xist/program.py` writes them
-  into a `.bit`.  The full map still needs a larger routing-only campaign.
+* Routing fuse map (pip -> bits): 209 candidates (124 long-wire, 85 slice/CIP)
+  across 31 tile locations, holdout-validated per location; see
+  `testdata/SL2-12E_pip_fuses_expanded.json` and `xist/campaign.py`.
+  A literal full-chip map still needs the full `auto:1504` campaign or a dump
+  of the vendor device database.
   The long-wire naming (`V06S0300` -> `V06S0302` -> ...) is decoded and the
   intermediate wires are generated, but the CIB/track-switch graph is still
   incomplete (a one-LUT IO design does not route yet).
