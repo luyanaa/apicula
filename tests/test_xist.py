@@ -1,0 +1,161 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from xist.bitstream import (Bitstream, LutSlot, decode_lut_init,
+                            encode_lut_init, diff_positions)
+from xist.device import parse_udev_report, parse_pkg_report
+from xist.xpn import parse_xpn
+
+
+def make_bs(rows=40, cols=40):
+    return Bitstream(
+        header_lines=["XIST ASCII Bitstream", "Version:          1.0",
+                      f"Rows:             {rows}", f"Cols:             {cols}"],
+        header={"Rows": str(rows), "Cols": str(cols)},
+        pre_block=["1010"],
+        rows=["0" * cols for _ in range(rows)],
+        footer_block=["1111"],
+        extra16="0" * 16,
+    )
+
+
+def test_bitstream_roundtrip(tmp_path):
+    bs = make_bs()
+    bs.rows[3] = "1" * 40
+    p = tmp_path / "a.bit"
+    bs.write(str(p))
+    other = Bitstream.read(str(p))
+    assert other.nrows == bs.nrows
+    assert other.ncols == bs.ncols
+    assert other.rows == bs.rows
+    assert other.extra16 == bs.extra16
+    assert other.to_bytes() == bs.to_bytes()
+
+
+def test_lut_codec_roundtrip():
+    bs = make_bs()
+    slot = LutSlot.byte_split(1, "F0", block_col=10)
+    for init in (0x0001, 0x8000, 0x6996, 0xC0C0, 0xFFFF):
+        encode_lut_init(bs, init, slot)
+        assert decode_lut_init(bs, slot) == init
+
+
+def test_diff_positions():
+    a = make_bs()
+    b = make_bs()
+    b.rows[5] = "1" + b.rows[5][1:]
+    b.rows[7] = b.rows[7][:3] + "1" + b.rows[7][4:]
+    d = diff_positions(a, b)
+    assert d == {5: [0], 7: [3]}
+
+
+UDEV = """[V]: Grid: (2, 3)
+0\t1\t2\t
+0\t.\tPIC_top\t.
+1\tPIC\tPLC\tPLC
+0\t.\tT7\t.
+1\tL2\t\t
+Count SLICE : 8
+Count PIO : 4
+"""
+
+
+def test_parse_udev():
+    rep = parse_udev_report(UDEV)
+    assert rep.rows == 2 and rep.cols == 3
+    assert rep.tiles[1][1] == "PLC"
+    assert rep.sites[0][1] == "T7"
+    assert rep.counts["SLICE"] == 8
+    assert rep.tiles_of("PLC") == [(1, 1), (1, 2)]
+
+
+PKG = "IO = A4, site = X, tile = R1C2, bank = 1, desc = GPIO\n"
+
+
+def test_parse_pkg():
+    pins = parse_pkg_report(PKG)
+    assert pins == [{"io": "A4", "site": "X", "tile": "R1C2",
+                     "bank": "1", "desc": "GPIO"}]
+
+
+XPN = '''design t
+{
+   signal "n1"
+   {
+      signal-pins
+         (SLICE_0, F0),
+         ("q[1]_MGIOL", OPOS);
+      route
+         R20C19_F4_SLICE.R20C19_F4,
+         R38C19_JA2.R39C19_JOPOSC_BSIOLOGIC,
+   }
+}
+'''
+
+
+def test_parse_xpn(tmp_path):
+    p = tmp_path / "t.xpn"
+    p.write_text(XPN)
+    sigs = parse_xpn(p)
+    assert set(sigs) == {"n1"}
+    assert sigs["n1"].pins == [("SLICE_0", "F0"), ("q[1]_MGIOL", "OPOS")]
+    assert sigs["n1"].route[0] == ("R20C19_F4", "R20C19_F4_SLICE")
+    assert sigs["n1"].route[1] == ("R39C19_JOPOSC_BSIOLOGIC", "R38C19_JA2")
+
+
+def test_chipdb_smoke(tmp_path):
+    from xist.chipdb import build_chip
+    from xist.bbalint import check
+    from xist.device import parse_udev_report
+
+    rep = parse_udev_report(UDEV)
+    chip = build_chip("SL2-12E-8F256C", rep, xpn_paths=[])
+    bba = tmp_path / "x.bba"
+    chip.write_bba(bba)
+    assert check(bba) == []
+    assert any(b.bel_type.index for t in chip.chip.tile_types for b in t.bels)
+
+
+def test_bbasm_smoke(tmp_path):
+    from xist.bbasm import assemble, dump_chip_info
+    bba = tmp_path / "t.bba"
+    bba.write_text("""push blob
+ref info
+label data
+u32 1
+label info
+u32 0x00ca7ca7
+u32 7
+u32 4
+u32 3
+str |xist|
+str |test|
+str |py|
+slice data 1
+slice data 1
+pop
+""")
+    data = assemble(bba.read_text())
+    info = dump_chip_info(data)
+    assert info["magic"] == "0xca7ca7"
+    assert (info["version"], info["width"], info["height"]) == (7, 4, 3)
+
+
+def test_real_udev_grid():
+    from xist.device import parse_udev_report
+    p = Path(__file__).resolve().parents[1] / "xist/testdata/SL2-12E-8F256C_udev.txt"
+    rep = parse_udev_report(p.read_text())
+    assert (rep.rows, rep.cols) == (40, 51)
+    assert rep.tile_type_counts()["PLC"] == 1504
+    assert rep.counts["SLICE"] == 6016
+
+
+def test_lut_maps():
+    from xist.lutmap import load
+    base = Path(__file__).resolve().parents[1] / "xist/testdata"
+    for s in "ABCD":
+        cal = load(base / f"SL2-12E_lut_{s}.json")
+        assert len(cal.slot().minterms) == 16
+        assert len(set(cal.slot().minterms)) == 16
