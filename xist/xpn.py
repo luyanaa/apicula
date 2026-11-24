@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_SIGNAL_RE = re.compile(r'signal\s+"([^"]+)"\s*\{', re.S)
+_SIGNAL_RE = re.compile(r'signal\s+(?:"([^"]+)"|([^\s{]+))\s*\{', re.S)
 _PIN_RE = re.compile(r'\(\s*"?([^",]+)"?\s*,\s*([^)]+)\)')
 _ROUTE_LINE_RE = re.compile(r'^\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*,\s*$')
 _TILE_RE = re.compile(r"^(R\d+C\d+)_(.+)$")
@@ -42,7 +42,7 @@ def parse_xpn(path: str | Path) -> dict[str, Signal]:
     text = Path(path).read_text(encoding="utf-8", errors="replace")
     signals: dict[str, Signal] = {}
     for m in _SIGNAL_RE.finditer(text):
-        name = m.group(1)
+        name = m.group(1) or m.group(2)
         start = m.end()
         depth = 1
         i = start

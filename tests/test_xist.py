@@ -232,3 +232,29 @@ def test_lut_grid4_samples():
     samples = {k: v for k, v in d.items() if k.startswith("R")}
     assert len(samples) == 16
     assert all("error" not in v for v in samples.values())
+
+
+def test_xpn_unquoted_signal(tmp_path):
+    from xist.xpn import parse_xpn
+    p = tmp_path / "u.xpn"
+    p.write_text('''design t
+{
+   signal a_c
+   {
+      signal-pins
+         ("a", PADDI),
+         (SLICE_0, C0);
+      route
+         R39C19_JPADDIA_PIO.R39C19_JDIA,
+   }
+}
+''')
+    sigs = parse_xpn(p)
+    assert list(sigs) == ["a_c"]
+    assert sigs["a_c"].route == [("R39C19_JDIA", "R39C19_JPADDIA_PIO")]
+
+
+def test_corpus_designs():
+    from xist.corpus import DESIGNS
+    assert len(DESIGNS) >= 8
+    assert "lut_chain" in DESIGNS and "io_pass" in DESIGNS
