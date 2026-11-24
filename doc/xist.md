@@ -346,6 +346,34 @@ set (98.7%).  The other 11 are same-track reversal pairs (`V02N0400` ->
 `V02S0401`) that act as wire aliases; the corpus also contains 103 `J*` wires
 invented by the nextpnr bring-up model, which have no vendor fuse.
 
+### BFD routing in the chipdb
+
+`xist/bfd_chipdb.py` installs a profile into a chipdb tile type:
+`build_chip(..., bfd_profiles={"PLC": "testdata/SL2-12E_bfd_PLC.json"})` adds
+every BFD wire and adds each `arcval(src,dst)` as a directed pip.  The fuse
+positions travel in the sidecar (`write_meta`):
+
+```
+"routing_fuses": {"PLC": {"src->dst": [{"row":8,"col":16,"fuse":"..."}]}}
+"row_rule": "bit_row = 29 * (tile_row - 1) + ram_row"
+"col_rule": "bit_col = bitcol_base[tile_col] - ram_col"
+"bitcol_base": {"19": 1500, ...}
+```
+
+`replace_cib=True` (demo: `--bfd-replace`) drops the synthetic PLC crossbar so
+the router can only use vendor pips.  Measured on routed designs:
+
+```
+mux4     PLC pips 29, fused 29
+io_pass  PLC pips 22, fused 22
+```
+
+Every PLC pip the router used is fuse-backed; the remaining pips are the
+edge/IO tiles, which still use the bring-up crossbar.  DFF-heavy designs
+(`dff_chain`, `counter8`, `shift8`) do not route in BFD-only mode: their data
+input is the slice output mux (`OFX -> DI`), so they require LUT/DFF packing
+that the bring-up uarch does not do yet.
+
 Tile columns 0 and 50 have no bitstream columns of their own: their I/O cells
 are configured through the neighbouring 59-column block (hence the base for
 those columns is absent).  Fuses whose equation mixes `config()`/`property()`

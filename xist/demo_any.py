@@ -5,8 +5,11 @@ Flow: Yosys (synth_gowin JSON) -> XIST LUT4/DFF/ALU/PIO cells -> chipdb
 (built from the device exports, no vendor routing corpus) -> nextpnr-himbaechel.
 
 The routing graph is a bring-up model: a per-tile CIB crossbar plus a complete
-1-row long-wire mesh.  It is not yet the vendor fuse map, but it lets arbitrary
-LUT/DFF/ALU/IO designs place and route through nextpnr.
+1-row long-wire mesh.  Pass ``--bfd`` to add the vendor BFD routing pips for
+PLC tiles (and ``--bfd-replace`` to drop the synthetic PLC crossbar).  With
+``--bfd-replace`` a LUT/IO design routes through vendor fuse-backed pips only;
+DFF-heavy designs still need proper LUT/DFF packing (a DFF data input is fed by
+the same slice's output mux, not by a free routing arc).
 
 Requirements: yosys in PATH, nextpnr-himbaechel built with the xist uarch.
 """
@@ -36,6 +39,10 @@ def main(argv=None) -> int:
                     "Downloads/nextpnr/build/nextpnr-himbaechel"))
     ap.add_argument("--workdir", default="/tmp/xist_any_demo")
     ap.add_argument("--device", default="SL2-12E")
+    ap.add_argument("--bfd", action="store_true",
+                    help="use the vendor BFD PLC routing profile")
+    ap.add_argument("--bfd-replace", action="store_true",
+                    help="drop the generic CIB for PLC (BFD only)")
     args = ap.parse_args(argv)
     wd = Path(args.workdir)
     wd.mkdir(parents=True, exist_ok=True)
@@ -62,14 +69,25 @@ def main(argv=None) -> int:
     from xist.lutmap import load
     rep = parse_udev_report((TESTDATA / "SL2-12E-8F256C_udev.txt").read_text())
     pkg = parse_pkg_report((TESTDATA / "SL2-12E-8F256C_pkg.txt").read_text())
+    bfd = None
+    bitcol = None
+    if args.bfd or args.bfd_replace:
+        bfd = {"PLC": TESTDATA / "SL2-12E_bfd_PLC.json"}
+        bitcol = {int(k): v for k, v in json.loads(
+            (TESTDATA / "SL2-12E_bitcol_base.json").read_text()
+        )["column_base"].items()}
     chip = build_chip(
         "SL2-12E-8F256C", rep,
         luts={"A": load(TESTDATA / "SL2-12E_lut_A.json")},
         xpn_paths=[], pkg_pins=pkg,
         columns=json.loads((TESTDATA / "SL2-12E_columns.json").read_text()),
-        constids_path=HERE / "nextpnr/uarch/xist/constids.inc")
+        constids_path=HERE / "nextpnr/uarch/xist/constids.inc",
+        bfd_profiles=bfd, replace_cib=args.bfd_replace,
+        bitcol_base=bitcol)
     bba = wd / "xist-SL2-12E-8F256C.bba"
     chip.write_bba(bba)
+    if chip.routing_fuses:
+        chip.write_meta(wd / "xist-SL2-12E-8F256C.meta.json")
     (wd / "xist-SL2-12E-8F256C.bin").write_bytes(assemble(bba.read_text()))
 
     # 4. nextpnr: place + route

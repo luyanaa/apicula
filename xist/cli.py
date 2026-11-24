@@ -120,9 +120,20 @@ def cmd_chipdb(args) -> int:
                    json.loads(Path(args.columns).read_text()).items()}
     constids = args.constids or str(
         Path(__file__).resolve().parent / "nextpnr/uarch/xist/constids.inc")
+    bfd = {}
+    for spec in args.bfd_profile or []:
+        token, _, path = spec.partition("=")
+        bfd[token] = path
+    bitcol = None
+    if args.bitcol_base:
+        data = json.loads(Path(args.bitcol_base).read_text())
+        bitcol = {int(k): v for k, v in data["column_base"].items()}
     chip = build_chip(args.part, rep, luts=luts,
                       xpn_paths=args.xpn or [], pkg_pins=pkg_pins,
-                      columns=columns, constids_path=constids)
+                      columns=columns, constids_path=constids,
+                      bfd_profiles=bfd or None,
+                      replace_cib=args.replace_cib,
+                      bitcol_base=bitcol)
     out = Path(args.out_bba)
     out.parent.mkdir(parents=True, exist_ok=True)
     chip.write_bba(out)
@@ -185,6 +196,12 @@ def main(argv=None) -> int:
     p.add_argument("--pkg", help="'udev.pkg.report text file")
     p.add_argument("--columns", help="column origin JSON")
     p.add_argument("--constids", help="uarch constids.inc (default: bundled)")
+    p.add_argument("--bfd-profile", action="append", metavar="TOKEN=PATH",
+                   help="install a vendor BFD routing profile for a tile type")
+    p.add_argument("--replace-cib", action="store_true",
+                   help="drop the generic bring-up CIB for BFD tile types")
+    p.add_argument("--bitcol-base", default=None,
+                   help="bit column calibration JSON (for the sidecar)")
     p.add_argument("--out-bba", required=True)
     p.add_argument("--out-meta", default=None)
     p.set_defaults(func=cmd_chipdb)

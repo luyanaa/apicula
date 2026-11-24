@@ -35,6 +35,12 @@ class XistChip:
     family: str
     luts: dict[str, LutCalibration] = field(default_factory=dict)
     columns: dict[int, int | None] | None = None
+    # tile type -> {"src->dst": [{"row", "col", "fuse"}, ...]}
+    routing_fuses: dict[str, dict[str, list[dict]]] = field(default_factory=dict)
+    bitcol_base: dict[int, int] | None = None
+
+    ROW_RULE = "bit_row = 29 * (tile_row - 1) + ram_row"
+    COL_RULE = "bit_col = bitcol_base[tile_col] - ram_col"
 
     def write_bba(self, path: str | Path) -> None:
         self.chip.write_bba(str(path))
@@ -47,16 +53,22 @@ class XistChip:
             "lut": {k: v.to_json() for k, v in self.luts.items()},
             "column_origin": ({str(k): v for k, v in self.columns.items()}
                               if self.columns else None),
+            "routing_fuses": self.routing_fuses or None,
+            "row_rule": self.ROW_RULE,
+            "col_rule": self.COL_RULE,
+            "bitcol_base": ({str(k): v for k, v in self.bitcol_base.items()}
+                            if self.bitcol_base else None),
         }
         Path(path).write_text(json.dumps(meta, indent=2) + "\n")
 
 
 def _add_plc_tile_type(chip: Chip, name: str) -> None:
     tt = chip.create_tile_type(name)
-    # clock/reset are shared by all four slices; create them exactly once so the
-    # bel pins and the CIB pips refer to the same wire index
-    for w in ("CLK", "LSR"):
-        tt.create_wire(w)
+    # one clock/reset wire per slice; the BFD routing arcs drive CLK0..CLK3 /
+    # LSR0..LSR3, so the DFF clock pin must live on the slice's own wire.
+    for s in range(4):
+        for w in (f"CLK{s}", f"LSR{s}"):
+            tt.create_wire(w)
     for s in range(4):
         n0, n1 = 2 * s, 2 * s + 1
         # Wire names follow the vendor XPN conventions: slice A uses F0/F1,
@@ -79,7 +91,7 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
             tt.add_bel_pin(lut, "F", f"F{out}", PinType.OUTPUT)
         for dff, n in ((d0, n0), (d1, n1)):
             tt.add_bel_pin(dff, "D", f"DI{n}", PinType.INPUT)
-            tt.add_bel_pin(dff, "CLK", "CLK", PinType.INPUT)
+            tt.add_bel_pin(dff, "CLK", f"CLK{s}", PinType.INPUT)
             tt.add_bel_pin(dff, "Q", f"Q{n}", PinType.OUTPUT)
         # Carry/math cell: one ALU per slice, sharing the slice data inputs.
         for w in (f"CIN{n0}", f"COUT{n0}", f"SUM{n0}",
@@ -146,7 +158,10 @@ def build_chip(part: str, report: DeviceReport,
                xpn_paths: list[str] | None = None,
                pkg_pins: list[dict] | None = None,
                columns: dict[int, int | None] | None = None,
-               constids_path: str | Path | None = None) -> XistChip:
+               constids_path: str | Path | None = None,
+               bfd_profiles: dict[str, str | Path] | None = None,
+               replace_cib: bool = False,
+               bitcol_base: dict[int, int] | None = None) -> XistChip:
     chip = Chip("xist", part, report.cols, report.rows)
     if constids_path:
         chip.strs.read_constids(str(constids_path))
@@ -177,6 +192,18 @@ def build_chip(part: str, report: DeviceReport,
     # Seed a complete set of long-wire names so every tile can reach its
     # neighbours even when the XPN corpus does not cover that tile.
     _seed_long_wires(chip)
+
+    # Vendor BFD profiles: add the complete routing muxes for a tile type.
+    routing_fuses: dict[str, dict[str, list[dict]]] = {}
+    bfd_pips: set[tuple[str, str, str]] = set()
+    if bfd_profiles:
+        from .bfd_chipdb import install_profile, load_profile
+        for token, path in bfd_profiles.items():
+            if token not in chip.tile_type_idx:
+                continue
+            arcs = install_profile(chip, token, load_profile(path))
+            routing_fuses[token] = arcs
+            bfd_pips.update((token, *arc.split("->", 1)) for arc in arcs)
 
     # collect observed wires first, so pips/nodes can refer to them
     edges = list(routing_edges(xpn_paths or []))
@@ -217,7 +244,7 @@ def build_chip(part: str, report: DeviceReport,
         ls, ld = wire_local(src), wire_local(dst)
         if (rs, cs) == (rd, cd):
             key = (tok_s, ls, ld)
-            if key in added_pips:
+            if key in added_pips or key in bfd_pips:
                 continue
             tt = chip.tile_types[chip.tile_type_idx[tok_s]]
             tt.create_pip(ls, ld)
@@ -238,7 +265,7 @@ def build_chip(part: str, report: DeviceReport,
     # V06S0300 at R20 connects to V06S0302 at R22, ... V06S0306 at R26.
     # The XPN only lists the endpoints, so rebuild the chains as nodes.
     _connect_long_wires(chip, report)
-    _add_cib(chip)
+    _add_cib(chip, skip=set(bfd_profiles or {}) if replace_cib else set())
 
     # package pins -> PIO bels via the vendor site string (PL12C, PT13B, ...)
     if pkg_pins:
@@ -260,7 +287,8 @@ def build_chip(part: str, report: DeviceReport,
             pkg.create_pad(pin.get("io", ""), f"X{col}Y{row}",
                            f"PIO_{slot}", pin.get("desc", "").strip(), bank)
 
-    return XistChip(chip, part, family_for(part), luts, columns)
+    return XistChip(chip, part, family_for(part), luts, columns,
+                    routing_fuses=routing_fuses, bitcol_base=bitcol_base)
 
 
 def _seed_long_wires(chip: Chip) -> None:
@@ -281,7 +309,7 @@ def _seed_long_wires(chip: Chip) -> None:
                                 tt.create_wire(w)
 
 
-def _add_cib(chip: Chip) -> None:
+def _add_cib(chip: Chip, skip: set[str] | None = None) -> None:
     """Add a per-tile crossbar between bel pins, local wires and long wires.
 
     This is a bring-up routing model: every source can reach every sink in the
@@ -290,9 +318,13 @@ def _add_cib(chip: Chip) -> None:
     """
     src_re = re.compile(r"^(?:F\d+|Q\d+|SUM\d+|COUT\d+|JDI[A-D]|JPADDI[A-D]_PIO|"
                         r"[VH]\d{2}[NSEW]\d{2}\d{2}|.*_OUT)$")
-    snk_re = re.compile(r"^(?:[A-D]\d|AI\d+_\d+|DI\d+|CIN\d+|CLK|LSR|PADDO[A-D]_PIO|JPADDO[A-D]|"
+    snk_re = re.compile(r"^(?:[A-D]\d|AI\d+_\d+|DI\d+|CIN\d+|CLK\d?|LSR\d?|PADDO[A-D]_PIO|JPADDO[A-D]|"
                         r"[VH]\d{2}[NSEW]\d{2}\d{2}|.*_IN)$")
+    skip = skip or set()
+    idx_all = {v: k for k, v in chip.strs.strs.items()}
     for tt in chip.tile_types:
+        if idx_all.get(tt.type_name.index) in skip:
+            continue
         idx = {v: k for k, v in tt.strs.strs.items()}
         names = [idx[w.name.index] for w in tt.wires]
         bus = [f"CIB{i}" for i in range(32)]
@@ -363,6 +395,28 @@ def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
         ra, rb = find(a), find(b)
         if ra != rb:
             parent[rb] = ra
+
+    # length-0 boundary wires: H00R in a tile meets H00L in the tile to its
+    # right; V00B meets V00T in the tile below.  There are four tracks each.
+    for r, row in enumerate(report.tiles):
+        for c, tok in enumerate(row):
+            if not tok or tok == ".":
+                continue
+            tt = chip.tile_types[chip.tile_type_idx[tok]]
+            for track in range(4):
+                for a, b, dr, dc in ((f"H00R{track:02d}00", f"H00L{track:02d}00", 0, 1),
+                                     (f"V00B{track:02d}00", f"V00T{track:02d}00", 1, 0)):
+                    tr, tc = r + dr, c + dc
+                    if not (0 <= tr < report.rows and 0 <= tc < report.cols):
+                        continue
+                    if not tt.has_wire(a):
+                        continue
+                    ntok = report.tiles[tr][tc]
+                    if not ntok or ntok == ".":
+                        continue
+                    ntt = chip.tile_types[chip.tile_type_idx[ntok]]
+                    if ntt.has_wire(b):
+                        union((r, c, a), (tr, tc, b))
 
     for r, row in enumerate(report.tiles):
         for c, tok in enumerate(row):

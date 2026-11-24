@@ -15,9 +15,13 @@ Gowin chipdb.  A minimal `xist` uarch now lives in
   bring-up graph: `python -m xist.demo_any design.v` reports `Routing complete`
   and `Program finished normally`.  Verified with 16 designs including adders,
   counters, comparators, multipliers, muxes, LFSRs and pipelines.
-* The graph is a bring-up model: a 32-wire per-tile CIB crossbar plus a
-  complete 1-row long-wire mesh, no vendor XPN needed.  It is not the vendor
-  fuse map yet; the bitstream writer still needs the real pip -> bits mapping.
+* The graph is a bring-up model by default: a 32-wire per-tile CIB crossbar
+  plus a complete 1-row long-wire mesh, no vendor XPN needed.
+* `build_chip(..., bfd_profiles={"PLC": ...})` installs the vendor BFD routing
+  pips for PLC and puts the arc -> fuse positions in the sidecar.
+  `xist.demo_any --bfd-replace` routes LUT/IO designs through vendor pips only;
+  every PLC pip used was fuse-backed in the measured designs (mux4 29/29,
+  io_pass 22/22).
 
 ## Database contents
 
@@ -60,8 +64,14 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   remains as an independent cross-check: 128/135 of its vendor-named pips are
   predicted exactly by the BFD map.
   The long-wire naming (`V06S0300` -> `V06S0302` -> ...) is decoded and the
-  intermediate wires are generated, but the CIB/track-switch graph is still
-  incomplete (a one-LUT IO design does not route yet).
+  intermediate wires are generated, including the H00L/H00R and V00T/V00B
+  boundary pairs.
+  BFD-only routing currently works for LUT/IO designs.  DFF-heavy designs need
+  LUT/DFF packing: a DFF data input is the slice output mux (`OFX -> DI`,
+  configured by slice fuses), not a free routing arc, so standalone DFFs (as
+  the bring-up packer emits) cannot route without a synthetic fallback.
+  Edge/IO tiles still use the bring-up crossbar until their profiles are
+  mapped to locations.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch
