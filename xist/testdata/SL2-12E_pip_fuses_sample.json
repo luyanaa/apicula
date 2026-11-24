@@ -1,0 +1,96 @@
+{
+ "note": "First pip->fuse correlation sample.  22 placements of the same a&b->o netlist with different pin assignments and slice R20C19D locked; 873 varying bit positions, 483 pips, 8 unique signature matches.  This is a sample, not a complete routing fuse map.",
+ "device": "SL2-12E-8F256C",
+ "design": "a&b->o",
+ "runs": 22,
+ "matches": [
+  {
+   "pip": [
+    "R20C19_D6",
+    "R20C19_V02N0002"
+   ],
+   "pos": [
+    559,
+    1484
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_C6_SLICE",
+    "R20C19_C6"
+   ],
+   "pos": [
+    577,
+    1458
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_D6_SLICE",
+    "R20C19_D6"
+   ],
+   "pos": [
+    577,
+    1460
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_D6",
+    "R20C19_V02S0001"
+   ],
+   "pos": [
+    562,
+    1484
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_D6",
+    "R20C19_V02S0002"
+   ],
+   "pos": [
+    502,
+    1494
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_A6_SLICE",
+    "R20C19_A6"
+   ],
+   "pos": [
+    578,
+    1456
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_B6_SLICE",
+    "R20C19_B6"
+   ],
+   "pos": [
+    577,
+    1457
+   ],
+   "invert": false
+  },
+  {
+   "pip": [
+    "R20C19_A6",
+    "R20C19_V02N0301"
+   ],
+   "pos": [
+    568,
+    1475
+   ],
+   "invert": false
+  }
+ ]
+}

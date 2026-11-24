@@ -310,3 +310,26 @@ def test_cib_chipdb_without_xpn():
     assert tt.has_wire("V06N0000")
     idx = {v: k for k, v in tt.strs.strs.items()}
     assert any(idx[b.name.index] == "ALU0" for b in tt.bels)
+
+
+def test_fusemap_correlate(tmp_path):
+    from xist.fusemap import correlate
+    from xist.bitstream import Bitstream
+    bits = []
+    for i in range(3):
+        bs = make_bs(rows=20, cols=20)
+        if i:
+            bs.rows[5] = bs.rows[5][:5] + "1" + bs.rows[5][6:]
+        p = tmp_path / f"b{i}.bit"
+        bs.write(str(p))
+        bits.append(p)
+    xpns = []
+    for i in range(3):
+        p = tmp_path / f"x{i}.xpn"
+        route = "R1C2_A.R1C2_B" if i else ""
+        p.write_text(f'signal s\n{{\n   route\n      {route};\n}}\n')
+        xpns.append(p)
+    matches = correlate(bits, xpns)
+    assert len(matches) == 1
+    assert matches[0]["pos"] == [5, 5]
+    assert matches[0]["pips"] == [["R1C2_B", "R1C2_A"]]

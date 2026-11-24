@@ -23,7 +23,8 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/chipdb.py` | **skeleton**: 2040 tiles, 16 bels/PLC, 196 package pads, observed routing; emits `.bba` |
 | `xist/bbalint.py` | **verified**: dangling label / push-pop checker |
 | `xist/bbasm.py` | **verified**: Python bbasm; produced a valid chipdb blob (magic/version/width/height checked) |
-| routing graph | **partial**: only pips observed in the XPN corpus |
+| routing graph | **bring-up**: complete CIB + long-wire mesh; arbitrary designs route |
+| pip -> fuse map | **first sample**: 8 candidate fuses from 22 variants (`SL2-12E_pip_fuses_sample.json`) |
 | bitstream checksum / `.bin` compression | **unknown** |
 | timing model | **unknown** (vendor STA is internal) |
 | `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for arbitrary LUT/DFF/ALU/MUX/IO designs on the bring-up graph; vendor fuse map / bitstream TODO |
@@ -214,6 +215,32 @@ This graph is a **bring-up model**, not the vendor fuse map: the CIB is a full
 crossbar, and the long-wire mesh uses 1-row segments (the vendor uses 2-row
 segments and specific mux fuses).  It proves the bels/packer/placer/router
 integration; the bitstream writer still needs the real pip->fuse map.
+
+## Pip -> fuse correlation (first results)
+
+`xist/fusemap.py` runs the same netlist with different pin assignments (fixed
+slice, varying routing) and correlates bitstream bits with XPN pip presence:
+
+```bash
+python -m xist.fusemap --bits w*.bit --xpns w*.xpn --out pipfuses.json
+```
+
+Sample run (a&b->o, 22 pin variants, slice R20C19D locked):
+
+```
+variant bits 873, signatures 80
+pips 483, signatures 62
+unique exact matches 8
+  ('R20C19_A6_SLICE', 'R20C19_A6') -> (578, 1456)
+  ('R20C19_B6_SLICE', 'R20C19_B6') -> (577, 1457)
+  ('R20C19_C6_SLICE', 'R20C19_C6') -> (577, 1458)
+  ('R20C19_D6_SLICE', 'R20C19_D6') -> (577, 1460)
+  ...
+```
+
+The candidates are stored in `testdata/SL2-12E_pip_fuses_sample.json`.  They are
+a start, not a complete map; more routing-only variants are needed for the
+whole CIB and long-wire fabric.
 
 ## Chip database
 
