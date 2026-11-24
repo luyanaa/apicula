@@ -36,6 +36,9 @@ build/nextpnr-himbaechel \
     --place --write placed.json
 ```
 
-Expected result today: the chipdb loads, cells are placed on LUT/DFF/PIO bels.
-Routing and bitstream generation still need the real routing graph and fuse
-maps (see `doc/xist.md`).
+Verified with nextpnr `e4c7859` (2026-11-24): the chipdb loads, the 6-cell
+design places successfully (`--no-route`, HeAP/SA, checksum printed,
+`Program finished normally`).  Routing fails at `a_IBUF_I_O[0]` because the
+PIO/fabric and inter-tile paths are not in the database yet; the PLC bel wires
+already use the vendor XPN names so observed pips attach to them.  The
+bitstream writer is not implemented.

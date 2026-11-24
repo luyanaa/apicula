@@ -1,79 +1,54 @@
 # Wiring the XIST database into nextpnr
 
-The `.bba` produced here is the same format as `nextpnr-himbaechel`'s Gowin
-chipdb.  The remaining work is a `uarch` implementation; this note records the
-integration points and what the database currently provides.
+The `.bba` produced by `xist.chipdb` is the same format as nextpnr-himbaechel's
+Gowin chipdb.  A minimal `xist` uarch now lives in
+[`nextpnr/uarch/xist`](nextpnr/uarch/xist); see
+[`nextpnr/README.md`](nextpnr/README.md) for the apply/build/run recipe.
 
-## Expected tree
+## Status (nextpnr e4c7859, 2026-11-24)
 
-```
-nextpnr/
-  himbaechel/
-    uarch/
-      xist/
-        CMakeLists.txt
-        constids.inc
-        xist.cc            # UArch hooks: pack, validity, bel pins, globals
-        xist.h
-        pack_lut.cc        # LUT4 + DFF -> SLICE
-        pack_io.cc         # PIO / IOLOGIC
-        pack_mem.cc        # EBR
-        pack_dsp.cc        # MULT18 / ALU
-        pcf.cc             # .upc / .cst reader
-    chipdb/
-      xist-SL2-12E.bin     # produced by  python -m xist.bbasm ...
-```
+* uarch compiles with `-DARCH=himbaechel -DHIMBAECHEL_UARCH=xist`.
+* chipdb loads (51x40, 2040 tile instances, 43 tile types, 196 pads).
+* a 6-cell design (LUT4 + DFF + 4 PIO) **places successfully** with
+  `--no-route`; HeAP/SA finish normally and a checksum is printed.
+* `--route` fails at the first arc (`a_IBUF_I_O[0]`): the database currently
+  contains only the pips observed in one vendor XPN, and PIO/fabric/inter-tile
+  paths are not mapped yet.
 
-Build (from a nextpnr checkout):
+## Database contents
 
-```bash
-cmake -B build -DARCH=himbaechel -DHIMBAECHEL_UARCH=xist
-cmake --build build -j$(nproc)
-nextpnr-himbaechel --device SL2-12E --json top.json --write pnr.json
-```
-
-Install the blob under `share/himbaechel/xist/` (or pass it explicitly, depending
-on how the uarch looks it up).
-
-## What the database already contains
-
-* 51 x 40 grid (`width=51`, `height=40`) matching `'udev.report`.
-* Tile types for every grid token (`PLC`, `PIC`, `PIC_top`, `PIC_bot`,
-  `PIC_right`, `EBR`, `DSP`, `CTEST`, hard-IP tokens).
-* `PLC`: four slices, each with `LUT0/1` (`LUT4`) and `DFF0/1` (`DFF`) bels and
-  slice-local wires `S{n}_{A,B,C,D,F0,F1,Q0,Q1,CLK,LSR,DI0,DI1}`.
-* `PIC`: four `PIO` bels with `PAD/I/O/OE`.
-* Hard tiles: placeholder `IN/OUT` bels until pin maps are extracted.
-* Routing: pips/nodes observed in the XPN corpus (incomplete by construction).
+* One tile type per `'udev.report` token (`PLC`, `PIC_*`, `EBR`, `DSP`, ...).
+* `PLC`: four slices, each with two `LUT4` and two `DFF` bels.  Wire names use
+  the vendor XPN convention (`F0..F7`, `DI0..DI7`, `Q0..Q7`, `A0..D7`), so pips
+  parsed from XPN dumps attach directly to the bel pins.
+* `PIC`: four `PIO_A..D` bels with `PAD/I/O/OE`.
+* Package pins from `'udev.pkg.report` are attached as pads
+  (`PL12C` -> X0Y12 / `PIO_C`).
+* Routing: every `dst.src` pair in the XPN corpus becomes a pip (same tile) or a
+  node (cross-tile long wire).  This is intentionally sparse.
 
 The sidecar JSON (`--out-meta`) carries the bitstream data nextpnr does **not**
-store in the bba: the per-slice LUT INIT fuse maps.  The uarch's bitstream writer
-should embed those tables (or load the JSON at build time) when emitting `.bit`.
-
-## UArch hooks to implement first
-
-1. **Cell types**: `LUT4` (pins A,B,C,D,Z), `DFF` (D,CK,Q), `PIO` (PAD,I,O,OE).
-2. **`isBelLocationValid`**: a LUT/DFF may only bind to a bel in its slice; a
-   PIO to an IO bel.  Start permissive, tighten after the packer works.
-3. **Packer**: `LUT4` -> `LUT{0..7}`, `DFF` -> `DFF{0..7}`, PIO -> `PIO{0..3}`.
-   Use `SLICE{n}` clusters to keep the two LUTs and two DFFs of a slice together.
-4. **Globals**: clock wires are not in the database yet; a first bring-up can
-   route clocks as ordinary nets.
-5. **Bitstream writer**:
-   * start from a known-good blank `.bit` (one per device),
-   * set LUT INIT fuses using the sidecar map,
-   * set DFF config bits (not yet calibrated),
-   * set PIO config bits (not yet calibrated),
-   * set routing fuses (not yet calibrated),
-   * append/recompute the 16-bit checksum (algorithm unknown).
-   For a first hardware test, LUT-only + fixed routing from a hand-placed
-   reference design is enough.
+store in the bba: the per-slice LUT INIT fuse maps and the column-origin table.
+The uarch's bitstream writer will load these when emitting `.bit`.
 
 ## Known gaps
 
-* Column origin table (tile column -> bitstream column) is not calibrated; only
-  the relative slice offsets (D=0, C=+8, B=+24, A=+32) are known.
+* **Per-tile LUT layout**: the LUT minterm permutation varies with tile position
+  (4x4 grid samples in `testdata/SL2-12E_lut_grid4.json`).  The block origin is
+  known from `SL2-12E_columns.json`; the permutation needs a per-tile campaign
+  (`python -m xist.cli tiles ...`) or an equivalence-class study.
 * DFF / PIO / EBR / DSP fuse maps.
-* Routing fuse map (pip -> bits).
+* Routing fuse map (pip -> bits) and the PIO/IOLOGIC + inter-tile routing graph.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
+* Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch
+  only removes nextpnr's synthetic IOBs.
+
+## Next milestones
+
+1. Routing golden corpus: generate designs that exercise every wire type, dump
+   XPN, and build a connected graph (bel pins already use the vendor names).
+2. Per-tile LUT calibration or an equivalence-class table.
+3. Real packer + bitstream writer for LUT/DFF/PIO on SL2-12E.
+4. Yosys `synth_xist` derived from `synth_gowin`.
+5. Timing sampling from `ta.report` and PVT fit.

@@ -54,26 +54,32 @@ class XistChip:
 def _add_plc_tile_type(chip: Chip, name: str) -> None:
     tt = chip.create_tile_type(name)
     for s in range(4):
-        # wires for one slice
-        for w in ("A", "B", "C", "D", "F0", "F1", "Q0", "Q1",
-                  "CLK", "LSR", "DI0", "DI1"):
-            tt.create_wire(f"S{s}_{w}")
-        p = f"S{s}_"
-        l0 = tt.create_bel(f"LUT{2*s}", "LUT4", 4 * s)
-        l1 = tt.create_bel(f"LUT{2*s+1}", "LUT4", 4 * s + 1)
-        d0 = tt.create_bel(f"DFF{2*s}", "DFF", 4 * s + 2)
-        d1 = tt.create_bel(f"DFF{2*s+1}", "DFF", 4 * s + 3)
-        for lut, inp, out in ((l0, 0, 0), (l1, 1, 1)):
-            for pin, w in zip(("I[0]", "I[1]", "I[2]", "I[3]"), "ABCD"):
-                tt.add_bel_pin(lut, pin, p + w, PinType.INPUT)
-            tt.add_bel_pin(lut, "F", p + f"F{out}", PinType.OUTPUT)
-        for dff, idx in ((d0, 0), (d1, 1)):
-            tt.add_bel_pin(dff, "D", p + f"DI{idx}", PinType.INPUT)
-            tt.add_bel_pin(dff, "CLK", p + "CLK", PinType.INPUT)
-            tt.add_bel_pin(dff, "Q", p + f"Q{idx}", PinType.OUTPUT)
+        n0, n1 = 2 * s, 2 * s + 1
+        # Wire names follow the vendor XPN conventions: slice A uses F0/F1,
+        # B uses F2/F3, C uses F4/F5, D uses F6/F7 (and likewise A0..D0/A1..D1,
+        # DI0/DI1, Q0/Q1).  Sharing these names lets the pips observed in XPN
+        # dumps connect directly to the bel pins.
+        for w in (f"A{n0}", f"B{n0}", f"C{n0}", f"D{n0}",
+                  f"A{n1}", f"B{n1}", f"C{n1}", f"D{n1}",
+                  f"F{n0}", f"F{n1}", f"Q{n0}", f"Q{n1}",
+                  f"DI{n0}", f"DI{n1}", "CLK", "LSR"):
+            tt.create_wire(w)
+        l0 = tt.create_bel(f"LUT{n0}", "LUT4", 4 * s)
+        l1 = tt.create_bel(f"LUT{n1}", "LUT4", 4 * s + 1)
+        d0 = tt.create_bel(f"DFF{n0}", "DFF", 4 * s + 2)
+        d1 = tt.create_bel(f"DFF{n1}", "DFF", 4 * s + 3)
+        for lut, n, out in ((l0, n0, n0), (l1, n1, n1)):
+            for pin, w in zip(("I[0]", "I[1]", "I[2]", "I[3]"),
+                              (f"A{n}", f"B{n}", f"C{n}", f"D{n}")):
+                tt.add_bel_pin(lut, pin, w, PinType.INPUT)
+            tt.add_bel_pin(lut, "F", f"F{out}", PinType.OUTPUT)
+        for dff, n in ((d0, n0), (d1, n1)):
+            tt.add_bel_pin(dff, "D", f"DI{n}", PinType.INPUT)
+            tt.add_bel_pin(dff, "CLK", "CLK", PinType.INPUT)
+            tt.add_bel_pin(dff, "Q", f"Q{n}", PinType.OUTPUT)
         # LUT output can feed the slice DFF and the fabric output
-        tt.create_pip(p + "F0", p + "DI0")
-        tt.create_pip(p + "F1", p + "DI1")
+        tt.create_pip(f"F{n0}", f"DI{n0}")
+        tt.create_pip(f"F{n1}", f"DI{n1}")
         g = tt.create_group(f"SLICE{s}", "SLICE")
         for bel in (l0, l1, d0, d1):
             tt.add_bel_to_group(bel, f"SLICE{s}")

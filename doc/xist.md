@@ -171,7 +171,9 @@ Each worker gets its own directory, so the vendor tool instances do not clash.
 `xist/chipdb.py` builds a `nextpnr.himbaechel_dbgen.chip.Chip`:
 
 * one tile type per `'udev.report` token (`PLC`, `PIC_*`, `EBR`, `DSP`, ...),
-* `PLC`: 4 slices x (2 `LUT4` + 2 `DFF`) with slice-local wires,
+* `PLC`: 4 slices x (2 `LUT4` + 2 `DFF`).  Wire names follow the vendor XPN
+  convention (`F0..F7`, `DI0..DI7`, `Q0..Q7`, `A0..D7`), so pips parsed from XPN
+  dumps attach directly to the bel pins,
 * `PIC`: 4 `PIO` bels with PAD/I/O/OE,
 * hard tiles: placeholder bels,
 * routing: every `dst.src` pair in the XPN corpus becomes a pip (same tile) or a
@@ -189,8 +191,9 @@ systematic pip fuzzer (see below).
    much cheaper than Gowin's black-box fuzzing.
 2. **Bitstream writer details**: identify the 16-bit checksum and the `.bin`
    compression (or bypass with an SVF/JTAG writer).
-3. **nextpnr uarch**: `himbaechel/uarch/xist/{xist.cc,pack_*.cc,constids.inc}`
-   plus the `bbasm` build rule; start with LUT/DFF/PIO only.
+3. **nextpnr uarch**: the bring-up uarch is in `xist/nextpnr/uarch/xist/`
+   (loads the chipdb, places LUT4/DFF/PIO).  Next: a real packer, PIO/IOLOGIC
+   and inter-tile routing, then the bitstream writer.
 4. **Yosys**: `synth_gowin`-derived `synth_xist` and a XIST cell library
    (the vendor sim library under `common/sim/verilog/XIST/` documents port
    names and parameters).
