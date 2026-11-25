@@ -474,7 +474,27 @@ bottom row base 1102 (rows 1102..1107)
 column delta: T/B column 7 -> -2, T/B column 45 -> -1, otherwise 0
 ```
 
-The `-12k` corner tiles are not mapped.
+### Applying PIO configuration
+
+```
+python -m xist.apply --base template.bit --xpn design.xpn --out out.bit
+python -m xist.apply --base template.bit --xpn design.xpn --check vendor.bit
+```
+
+`xist/apply.py` programs every edge pad's PIO configuration from the XPN into a
+`.bit` template; `--check` compares the written positions with a vendor
+bitstream.  Example (c0 design into an unrelated template): 863/863 bits match.
+The C++ uarch writer is still blocked on the unknown `.bit` checksum; this
+Python path uses the same sidecar data (`pio_config`).
+
+### -12k corner tiles
+
+UDEF tokens such as `R1C27-12k`, `R16C28-12k`, `R22C1-12k` are the
+`CENTER6_12K`..`CENTERA_12K` / `CFG0_12K` / `DSP*_12K` spine tiles, not PIO.
+They carry long-wire/CIB routing (the corpus routes `H06W`/`V06S` wires through
+them) and some have clock/DCC sites.  Their routing profiles are in
+`SL2-12E_bfd_profiles.json`, but their 2-column / 6-row bit mapping is not
+calibrated, so they remain synthetic in the router.
 
 DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
 mode: their data input is the slice output mux (`OFX -> DI`), so they require

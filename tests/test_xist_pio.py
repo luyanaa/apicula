@@ -99,6 +99,28 @@ def _make_bs(rows=60, cols=2400):
     )
 
 
+def test_apply_pio(tmp_path):
+    from xist.apply import apply_pio
+    xpn = tmp_path / "x.xpn"
+    xpn.write_text('''design top
+{
+   comp "a"
+   {
+      logical
+      {
+         program "PADDI:PADDI IOBUF:::PULLMODE=DOWN,IO_TYPE=LVCMOS25, DRIVE=NA,SLEWRATE=NA,CLAMP=ON, OPENDRAIN=OFF,DIFFRESISTOR=OFF, DIFFDRIVE=NA,BANK_VCCIO=2.5, HYSTERESIS=SMALL,PERSISTENT=OFF VREF:OFF PGMUX:INBUF INRDMUX:PGMUX";
+      }
+      site PL2A;
+   }
+}
+''')
+    bs = _make_bs()
+    n = apply_pio(bs, xpn)
+    assert n > 0
+    assert bs.rows[34][2375] == "1"   # NG2_N_A
+    assert bs.rows[44][2375] == "1"   # RD_A
+
+
 def test_program_pio(tmp_path):
     xpn = tmp_path / "x.xpn"
     xpn.write_text('''design top

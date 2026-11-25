@@ -93,7 +93,10 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   Top/bottom pads are the 6-row PIC_T5/PIC_B5 profiles at row base 1108/1102
   (column 7/45 use a -2/-1 base correction).  All 3353 edge tile groups match
   322991/322991 bits (100%), read-only and through `program_pio`.
-  Remaining: the `-12k` corners are not mapped.
+  `xist.apply` applies the PIO configuration to a `.bit` template from an XPN
+  (`--check` compares with a vendor bitstream; c0: 863/863 bits).
+  Remaining: the `-12k` corners are CENTER/CFG/DSP spine tiles carrying
+  long-wire routing, not PIO; their 2-column bit mapping is uncalibrated.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch
