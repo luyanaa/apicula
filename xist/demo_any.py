@@ -64,7 +64,7 @@ def main(argv=None) -> int:
 
     # 3. Build the chipdb (no XPN corpus: the CIB/long-wire model is enough)
     from xist.device import parse_udev_report, parse_pkg_report
-    from xist.chipdb import build_chip
+    from xist.chipdb import build_chip, default_bfd_profiles
     from xist.bbasm import assemble
     from xist.lutmap import load
     rep = parse_udev_report((TESTDATA / "SL2-12E-8F256C_udev.txt").read_text())
@@ -72,7 +72,7 @@ def main(argv=None) -> int:
     bfd = None
     bitcol = None
     if args.bfd or args.bfd_replace:
-        bfd = {"PLC": TESTDATA / "SL2-12E_bfd_PLC.json"}
+        bfd = default_bfd_profiles()
         bitcol = {int(k): v for k, v in json.loads(
             (TESTDATA / "SL2-12E_bitcol_base.json").read_text()
         )["column_base"].items()}

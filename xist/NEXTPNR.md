@@ -70,8 +70,17 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   LUT/DFF packing: a DFF data input is the slice output mux (`OFX -> DI`,
   configured by slice fuses), not a free routing arc, so standalone DFFs (as
   the bring-up packer emits) cannot route without a synthetic fallback.
-  Edge/IO tiles still use the bring-up crossbar until their profiles are
-  mapped to locations.
+  The edge ring is split into contextual tile types and mapped with
+  `default_bfd_profiles()`: CTEST row 1/38 -> CIB_CFG, CTEST in the EBR/DSP
+  bands -> CIB_EBR, CTEST columns 1/49 -> CIB_EBR0_END0 / CIB_EBR2_END1, EBR ->
+  CIB_EBR, D0..D8 -> CIB_DSP, with left/right edge variants.  Routed designs
+  now use fuse-backed CTEST/EBR/DSP pips too (e.g. wide_eq: CTEST_CFG 3/3,
+  CTEST_EBR 1/1).
+  Still synthetic: PIC (column 0), PIC_right (column 50), PIC_top/bot and the
+  `-12k` corners.  Their bits live in the neighbouring 59-column block and
+  their equations include negated arcs + wire guards
+  (`!arcval(...) && wire(...)`), which the positive arc-only writer does not
+  model yet.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch

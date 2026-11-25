@@ -17,8 +17,12 @@ from pathlib import Path
 from .dbgen.chip import Chip
 
 
-def load_profile(path: str | Path) -> dict:
-    return json.loads(Path(path).read_text())
+def load_profile(path: str | Path, name: str | None = None) -> dict:
+    """Load a single profile, or one entry of ``SL2-12E_bfd_profiles.json``."""
+    data = json.loads(Path(path).read_text())
+    if name is not None:
+        data = data["profiles"][name]
+    return data
 
 
 def pip_fuses(profile: dict) -> dict[str, list[dict]]:

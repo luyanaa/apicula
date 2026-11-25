@@ -361,18 +361,46 @@ positions travel in the sidecar (`write_meta`):
 ```
 
 `replace_cib=True` (demo: `--bfd-replace`) drops the synthetic PLC crossbar so
-the router can only use vendor pips.  Measured on routed designs:
+the router can only use vendor pips.
+
+The edge ring is split into contextual tile types because one UDEV token can
+cover physically different CIB blocks:
+
+```
+CTEST, row 1/38          -> CTEST_CFG   profile CIB_CFG
+CTEST, EBR/DSP row bands -> CTEST_EBR   profile CIB_EBR
+CTEST, column 1 / 49     -> CTEST_L/R   profile CIB_EBR0_END0 / CIB_EBR2_END1
+EBR   body / column edge -> EBR_CIB, EBR_L/R
+D0..D8 (row 16)          -> DSP_CIB     profile CIB_DSP, DSP_L/R at the edges
+```
+
+`default_bfd_profiles()` installs this map; the sidecar then contains one
+`routing_fuses` table per contextual type (PLC 2500, CTEST_CFG 2476,
+EBR_CIB 2500, DSP_CIB 2476, CTEST_L 2556, CTEST_R 2532, ...).
+
+Measured on routed designs (`--bfd-replace`):
 
 ```
 mux4     PLC pips 29, fused 29
-io_pass  PLC pips 22, fused 22
+io_pass  PLC pips 23, fused 23
+wide_eq  PLC 43/43, CTEST_CFG 3/3, CTEST_EBR 1/1
 ```
 
-Every PLC pip the router used is fuse-backed; the remaining pips are the
-edge/IO tiles, which still use the bring-up crossbar.  DFF-heavy designs
-(`dff_chain`, `counter8`, `shift8`) do not route in BFD-only mode: their data
-input is the slice output mux (`OFX -> DI`), so they require LUT/DFF packing
-that the bring-up uarch does not do yet.
+Edge CIB pips are now fuse-backed.  What remains synthetic:
+`PIC` (column 0), `PIC_right` (column 50), `PIC_top/bot` and the `-12k`
+corner tiles.  Their configuration lives in the neighbouring 59-column block,
+and their equations include negated arcs and wire guards, e.g.
+
+```
+MC1_INDEL_0 = !arcval(JPADDIA_PIO,JDIA) && wire(JDIA)
+```
+
+so the positive arc-only writer is not correct for them yet.
+
+DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
+mode: their data input is the slice output mux (`OFX -> DI`), so they require
+LUT/DFF packing that the bring-up uarch does not do yet.  `--bfd` (additive)
+still routes the full corpus 10/10.
 
 Tile columns 0 and 50 have no bitstream columns of their own: their I/O cells
 are configured through the neighbouring 59-column block (hence the base for

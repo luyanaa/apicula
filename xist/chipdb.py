@@ -141,16 +141,66 @@ def _add_hard_tile_type(chip: Chip, name: str) -> None:
     tt.add_bel_pin(b, "OUT", f"{name}_OUT", PinType.OUTPUT)
 
 
-def _tile_kind(token: str) -> str:
-    if token.startswith("PLC"):
+
+TESTDATA = Path(__file__).resolve().parent / "testdata"
+
+# Contextual tile types.  A single UDEV token can cover physically different
+# CIB blocks: CTEST is the top/bottom CIB ring (row 1/38), the EBR/DSP row
+# bands, and the 59-column left/right edges; EBR and D0..D8 likewise have a
+# 48-column body and 59-column edge variants.
+def _context_name(tok: str, r: int, c: int) -> str:
+    if tok == "PLC":
         return "PLC"
-    if token.startswith("PIC"):
+    if tok == "CTEST":
+        if c == 1:
+            return "CTEST_L"
+        if c == 49:
+            return "CTEST_R"
+        if r in (1, 38):
+            return "CTEST_CFG"
+        return "CTEST_EBR"
+    if tok == "EBR":
+        if c == 1:
+            return "EBR_L"
+        if c == 49:
+            return "EBR_R"
+        return "EBR_CIB"
+    if len(tok) == 2 and tok[0] == "D" and tok[1].isdigit():
+        if c == 1:
+            return "DSP_L"
+        if c == 49:
+            return "DSP_R"
+        return "DSP_CIB"
+    return tok
+
+
+def _context_kind(tok: str, r: int, c: int) -> str:
+    name = _context_name(tok, r, c)
+    if name == "PLC":
+        return "PLC"
+    if name.startswith("PIC"):
         return "PIC"
-    if token.startswith("EBR"):
-        return "EBR"
-    if token.startswith("DSP"):
-        return "DSP"
     return "HARD"
+
+
+def default_bfd_profiles() -> dict[str, tuple[Path, str | None]]:
+    """Context tile type -> (profile file, profile name) for the edge CIBs."""
+    prof = TESTDATA / "SL2-12E_bfd_profiles.json"
+    plc = TESTDATA / "SL2-12E_bfd_PLC.json"
+    return {
+        "PLC": (plc, None),
+        "CTEST_CFG": (prof, "CIB_CFG"),
+        "CTEST_EBR": (prof, "CIB_EBR"),
+        "EBR_CIB": (prof, "CIB_EBR"),
+        "DSP_CIB": (prof, "CIB_DSP"),
+        # 59-column left / right edge blocks (columns 1 and 49)
+        "CTEST_L": (prof, "CIB_EBR0_END0_NO_CLKDLY30"),
+        "EBR_L": (prof, "CIB_EBR0_END0_NO_CLKDLY30"),
+        "DSP_L": (prof, "CIB_EBR0_END0_NO_CLKDLY30"),
+        "CTEST_R": (prof, "CIB_EBR2_END1_SP_12K"),
+        "EBR_R": (prof, "CIB_EBR2_END1_SP_12K"),
+        "DSP_R": (prof, "CIB_EBR2_END1_SP_12K"),
+    }
 
 
 def build_chip(part: str, report: DeviceReport,
@@ -170,24 +220,28 @@ def build_chip(part: str, report: DeviceReport,
 
     chip.create_tile_type("EMPTY")
     kinds: dict[str, str] = {}
-    for row in report.tiles:
-        for tok in row:
-            if not tok or tok == ".":
-                continue
-            if tok not in kinds:
-                k = _tile_kind(tok)
-                kinds[tok] = k
-                if k == "PLC":
-                    _add_plc_tile_type(chip, tok)
-                elif k == "PIC":
-                    _add_io_tile_type(chip, tok)
-                else:
-                    _add_hard_tile_type(chip, tok)
-
-    # place tile types (every grid position needs one, including empty ones)
+    ctx: dict[tuple[int, int], str] = {}
     for r, row in enumerate(report.tiles):
         for c, tok in enumerate(row):
-            chip.set_tile_type(c, r, tok if tok and tok != "." else "EMPTY")
+            if not tok or tok == ".":
+                ctx[(r, c)] = "EMPTY"
+                continue
+            name = _context_name(tok, r, c)
+            ctx[(r, c)] = name
+            if name in kinds:
+                continue
+            k = _context_kind(tok, r, c)
+            kinds[name] = k
+            if k == "PLC":
+                _add_plc_tile_type(chip, name)
+            elif k == "PIC":
+                _add_io_tile_type(chip, name)
+            else:
+                _add_hard_tile_type(chip, name)
+
+    # place tile types (every grid position needs one, including empty ones)
+    for (r, c), name in ctx.items():
+        chip.set_tile_type(c, r, name)
 
     # Seed a complete set of long-wire names so every tile can reach its
     # neighbours even when the XPN corpus does not cover that tile.
@@ -198,10 +252,11 @@ def build_chip(part: str, report: DeviceReport,
     bfd_pips: set[tuple[str, str, str]] = set()
     if bfd_profiles:
         from .bfd_chipdb import install_profile, load_profile
-        for token, path in bfd_profiles.items():
+        for token, spec in bfd_profiles.items():
             if token not in chip.tile_type_idx:
                 continue
-            arcs = install_profile(chip, token, load_profile(path))
+            path, name = spec if isinstance(spec, (tuple, list)) else (spec, None)
+            arcs = install_profile(chip, token, load_profile(path, name))
             routing_fuses[token] = arcs
             bfd_pips.update((token, *arc.split("->", 1)) for arc in arcs)
 
@@ -216,8 +271,8 @@ def build_chip(part: str, report: DeviceReport,
             r, c = t
             if not (0 <= r < report.rows and 0 <= c < report.cols):
                 continue
-            tok = report.tiles[r][c]
-            if not tok or tok == ".":
+            tok = ctx.get((r, c))
+            if not tok or tok == "EMPTY":
                 continue
             local_wires.setdefault(tok, set()).add(wire_local(wire))
     for tok, wires in local_wires.items():
@@ -237,9 +292,9 @@ def build_chip(part: str, report: DeviceReport,
         if not (0 <= rs < report.rows and 0 <= cs < report.cols and
                 0 <= rd < report.rows and 0 <= cd < report.cols):
             continue
-        tok_s = report.tiles[rs][cs]
-        tok_d = report.tiles[rd][cd]
-        if not tok_s or tok_s == "." or not tok_d or tok_d == ".":
+        tok_s = ctx.get((rs, cs))
+        tok_d = ctx.get((rd, cd))
+        if not tok_s or tok_s == "EMPTY" or not tok_d or tok_d == "EMPTY":
             continue
         ls, ld = wire_local(src), wire_local(dst)
         if (rs, cs) == (rd, cd):
@@ -264,7 +319,7 @@ def build_chip(part: str, report: DeviceReport,
     # Long wires: the vendor names encode length/direction/track/segment, e.g.
     # V06S0300 at R20 connects to V06S0302 at R22, ... V06S0306 at R26.
     # The XPN only lists the endpoints, so rebuild the chains as nodes.
-    _connect_long_wires(chip, report)
+    _connect_long_wires(chip, report, ctx)
     _add_cib(chip, skip=set(bfd_profiles or {}) if replace_cib else set())
 
     # package pins -> PIO bels via the vendor site string (PL12C, PT13B, ...)
@@ -277,8 +332,8 @@ def build_chip(part: str, report: DeviceReport,
             row, col, slot = loc
             if not (0 <= row < report.rows and 0 <= col < report.cols):
                 continue
-            tok = report.tiles[row][col]
-            if not tok or tok == ".":
+            tok = ctx.get((row, col))
+            if not tok or tok == "EMPTY":
                 continue
             try:
                 bank = int(pin.get("bank", "0") or 0)
@@ -375,7 +430,8 @@ _LONG_RE = re.compile(r"^([VH])(\d{2})([NSEW])(\d{2})(\d{2})$")
 _DIR_STEP = {"N": (-1, 0), "S": (1, 0), "E": (0, 1), "W": (0, -1)}
 
 
-def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
+def _connect_long_wires(chip: Chip, report: DeviceReport,
+                        ctx: dict[tuple[int, int], str]) -> None:
     """Union long-wire segments (V06S0300 -> V06S0302 -> ...) into nodes.
 
     XPN only lists the endpoints of a long wire.  The vendor name encodes the
@@ -400,9 +456,10 @@ def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
     # right; V00B meets V00T in the tile below.  There are four tracks each.
     for r, row in enumerate(report.tiles):
         for c, tok in enumerate(row):
-            if not tok or tok == ".":
+            name = ctx.get((r, c))
+            if not name or name == "EMPTY":
                 continue
-            tt = chip.tile_types[chip.tile_type_idx[tok]]
+            tt = chip.tile_types[chip.tile_type_idx[name]]
             for track in range(4):
                 for a, b, dr, dc in ((f"H00R{track:02d}00", f"H00L{track:02d}00", 0, 1),
                                      (f"V00B{track:02d}00", f"V00T{track:02d}00", 1, 0)):
@@ -411,18 +468,19 @@ def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
                         continue
                     if not tt.has_wire(a):
                         continue
-                    ntok = report.tiles[tr][tc]
-                    if not ntok or ntok == ".":
+                    nname = ctx.get((tr, tc))
+                    if not nname or nname == "EMPTY":
                         continue
-                    ntt = chip.tile_types[chip.tile_type_idx[ntok]]
+                    ntt = chip.tile_types[chip.tile_type_idx[nname]]
                     if ntt.has_wire(b):
                         union((r, c, a), (tr, tc, b))
 
     for r, row in enumerate(report.tiles):
         for c, tok in enumerate(row):
-            if not tok or tok == ".":
+            name = ctx.get((r, c))
+            if not name or name == "EMPTY":
                 continue
-            tt = chip.tile_types[chip.tile_type_idx[tok]]
+            tt = chip.tile_types[chip.tile_type_idx[name]]
             idx2str = {v: k for k, v in tt.strs.strs.items()}
             for wd in list(tt.wires):
                 name = idx2str.get(wd.name.index)
@@ -439,10 +497,10 @@ def _connect_long_wires(chip: Chip, report: DeviceReport) -> None:
                     tr, tc = r + dr * step, c + dc * step
                     if not (0 <= tr < report.rows and 0 <= tc < report.cols):
                         continue
-                    ntok = report.tiles[tr][tc]
-                    if not ntok or ntok == ".":
+                    nname_tok = ctx.get((tr, tc))
+                    if not nname_tok or nname_tok == "EMPTY":
                         continue
-                    ntt = chip.tile_types[chip.tile_type_idx[ntok]]
+                    ntt = chip.tile_types[chip.tile_type_idx[nname_tok]]
                     nname = f"{kind}{ln:02d}{d}{track}{s:02d}"
                     if not ntt.has_wire(nname):
                         ntt.create_wire(nname)
