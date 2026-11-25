@@ -28,6 +28,7 @@ from .xpn import parse_comps
 HERE = Path(__file__).resolve().parent
 TESTDATA = HERE / "testdata"
 PIO_FILE = TESTDATA / "SL2-12E_bfd_pio.json"
+PROFILES_FILE = TESTDATA / "SL2-12E_bfd_profiles.json"
 
 PROFILE = {"L": "PIC_L5", "R": "PIC_R5", "T": "PIC_T5", "B": "PIC_B5"}
 
@@ -37,11 +38,30 @@ def _config(xpn_path, pio_json: str | Path = PIO_FILE):
     return data, {s: load_profile(pio_json, PROFILE[s])[0] for s in "LRTB"}
 
 
+def edge_profile_eqs(profiles_file: str | Path = PROFILES_FILE) -> dict:
+    profiles = json.loads(Path(profiles_file).read_text())["profiles"]
+    return {s: profile_config_equations(profiles[PROFILE[s]]) for s in "LRTB"}
+
+
 def apply_pio(bs: Bitstream, xpn_path: str | Path,
               pio_json: str | Path = PIO_FILE, calibration=None) -> int:
-    """Program all edge PIO configuration bits for the XPN's pads."""
+    """Program all edge PIO/IOLOGIC configuration bits for the XPN's pads."""
     return apply_pio_comps(bs, list(parse_comps(xpn_path).values()),
-                           pio_json, calibration)
+                           pio_json, calibration,
+                           profile_eqs=edge_profile_eqs())
+
+
+def pad_group(site: str | None):
+    """PIO pad or IOLOGIC comp site -> (side, position along the edge)."""
+    if not site:
+        return None
+    if site.startswith("IOL_"):
+        pad, off = site[4:], 0
+    else:
+        pad, off = site, 1          # PIO sites look like PT19A
+    if len(pad) < 3 or pad[off] not in "LRTB" or not pad[off + 1:-1].isdigit():
+        return None
+    return pad[off], int(pad[off + 1:-1])
 
 
 def profile_config_equations(profile: dict) -> list:
@@ -70,13 +90,9 @@ def apply_pio_comps(bs: Bitstream, comps, pio_json: str | Path = PIO_FILE,
     cal = calibration or load_calibration()
     groups: dict[tuple[str, int], list] = {}
     for comp in comps:
-        site = comp.site
-        if not site or len(site) < 4 or site[0] != "P":
-            continue
-        side = site[1]
-        if side not in "LRTB" or not site[2:-1].isdigit():
-            continue
-        groups.setdefault((side, int(site[2:-1])), []).append(comp)
+        key = pad_group(comp.site)
+        if key is not None:
+            groups.setdefault(key, []).append(comp)
 
     n = 0
     for (side, pos), comps in groups.items():
@@ -108,13 +124,9 @@ def _positions(xpn_path: str | Path, pio_json: str | Path = PIO_FILE,
     comps = list(parse_comps(xpn_path).values())
     groups: dict[tuple[str, int], list] = {}
     for comp in comps:
-        site = comp.site
-        if not site or len(site) < 4 or site[0] != "P":
-            continue
-        side = site[1]
-        if side not in "LRTB" or not site[2:-1].isdigit():
-            continue
-        groups.setdefault((side, int(site[2:-1])), []).append(comp)
+        key = pad_group(comp.site)
+        if key is not None:
+            groups.setdefault(key, []).append(comp)
     out = []
     for (side, pos), cs in groups.items():
         if side in "LR":

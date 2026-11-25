@@ -729,9 +729,10 @@ Still open:
 * The ``PIC`` tiles in columns 0/50 have no BFD routing profile, so nets that
   pass through an edge tile (left/right pads) keep the template routing value.
   Pad *configuration* is written; edge routing fuses are not.
-* IOLOGIC is not modelled: a register placed inside an I/O cell by the vendor
-  is instead built as a slice DFF plus a pad, and output pads use
-  ``DATAMUX:PADDO``.
+* IOLOGIC cells are not in the chipdb: registers stay in slices and the pad's
+  IOLOGIC block is written off.  Its *configuration model* is implemented and
+  bit-exact against vendor OREG/IREG designs (see above); DDR/register-in-I/O
+  packing is not.
 
 ### Bitstream writer from routed JSON
 
@@ -818,6 +819,49 @@ are not routed user pins.
 
 `tests/test_xist_bitgen.py` checks those three pads and that a routed design
 with pads writes PIO bits (440 positions, no mismatch).
+
+### IOLOGIC configuration model
+
+Every edge pad has an IOLOGIC block (site ``IOL_<pad>``) that can register the
+input or output at the pad.  Its config fuses live in the edge tile profiles
+and reference ``IOLOGIC_0..3`` (slot A..D).  `pioconfig.env_for()` now maps a
+comp at ``IOL_B19A`` to ``IOLOGIC_0`` and parses the vendor program:
+
+```
+ORG    OUTREG:::REGSET=RESET,GSR=ENABLED,SRMODE=...,OUTREGMODE=FF
+IREG   FF:::REGSET=RESET,INREGMODE=FF,GSR=ENABLED,SRMODE=ASYNC
+       MODE:IREG_OREG
+       CEIMUX:1  LSRIMUX:0  CLKIMUX:CLK:::0=0,CLK=#SIG
+       LSROMUX:LSRMUX  CLKOMUX:CLK:::0=0,CLK=#SIG  IOLDO:IOLDO
+```
+
+Namespaced tokens (``OUTREG``/``TSREG``/``FF``/``IDDR4``/``ODDR4``) become
+properties (``OUTREG.REGSET``, ``FF.INREGMODE``...).  Mux tokens become
+``KEY.selection = selection`` (``CEIMUX:1`` -> ``CEIMUX.1=1``, ``LSRIMUX:0`` ->
+``LSRIMUX.0=0``), and signal sources drop the ``#`` (``CLK=#SIG`` ->
+``CLKIMUX.CLK=SIG``).  The literal ``0=0`` / ``0=1`` fields describe the mux'
+constant input and are skipped: the BFD treats ``CLKOMUX.0=="0"`` as "clock
+disabled", which the vendor leaves unset.  ``PIO`` comps also contribute the
+output mux selection (``DATAMUX:IOLDO``), which gates ``OUTFF``/``OUTCE_EN``.
+
+Validation, evaluating every pure-config fuse of the edge profile against the
+vendor bitstream:
+
+```
+OREG  counter, PB19 block (4 pads)  193/193 bits
+IREG  registered input, PL2A        191/191 bits
+```
+
+`testdata/SL2-12E_ireg.xpn` + `SL2-12E_ireg_vendor.bit` are a vendor oracle with
+the input register packed into ``IOL_L2A``.
+
+What is **not** modelled: the IOLOGIC cells themselves.  There are no IOLOGIC
+bels in the chipdb, so a register stays a slice DFF and the pad is configured
+with the IOLOGIC block off (all such fuses written 0).  DDR primitives could not
+be used as an oracle because the vendor RTL analyzer rejects ``ODDR``/``IDDR``/
+``ODDRX1`` instances ("Module ... is not found"); the vendor only creates
+IOLOGIC registers as an optimisation of ordinary RTL.  Replicating that
+optimisation, or adding DDR cells, is a separate packing feature.
 
 ### PIO configuration model
 

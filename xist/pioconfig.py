@@ -46,6 +46,58 @@ def parse_program(program: str) -> tuple[dict[str, str], set[tuple[str, str]]]:
     return props, configs
 
 
+_IOLOGIC_NS = {"OUTREG", "TSREG", "FF", "IDDR4", "ODDR4"}
+_IOLOGIC_SCALARS = {"MODE", "GSR", "SRMODE", "DQSW90MUX"}
+
+
+def iologic_site(site: str | None) -> str | None:
+    """``IOL_B19A`` -> ``IOLOGIC_0`` (slot A); None otherwise."""
+    if not site or not site.startswith("IOL_"):
+        return None
+    pad = site[4:]
+    if not pad or pad[-1] not in "ABCD":
+        return None
+    return f"IOLOGIC_{'ABCD'.index(pad[-1])}"
+
+
+def parse_iologic_program(program: str) -> tuple[dict[str, str], set[tuple[str, str]]]:
+    """Parse an IOLOGIC comp program.
+
+    Field tokens are namespaced (``OUTREG:::REGSET=RESET,...``), mux tokens
+    carry their selection either as ``KEY.field=value`` (``CLKOMUX:CLK:::0=0``)
+    or as ``KEY.value`` (``CEOMUX:1``), and ``MODE``/``GSR``/``SRMODE`` are
+    scalar configuration fields.
+    """
+    props: dict[str, str] = {}
+    configs: set[tuple[str, str]] = set()
+    for tok in program.split():
+        parts = tok.split(":")
+        key = parts[0]
+        fields = []
+        for grp in parts[1:]:
+            fields.extend(_FIELD_RE.findall(grp))
+        if key in _IOLOGIC_NS:
+            for field, value in fields:
+                props[f"{key}.{field}"] = value
+            continue
+        if key in _IOLOGIC_SCALARS and len(parts) > 1 and parts[1]:
+            configs.add((key, parts[1]))
+            continue
+        if fields:
+            for field, value in fields:
+                # "0=0" / "0=1" describe the constant input of the mux; the BFD
+                # treats CLKOMUX.0=="0" as "clock disabled", so only the named
+                # source (CLK=#SIG) is encoded.
+                if field == "0":
+                    continue
+                configs.add((f"{key}.{field}", value.lstrip("#")))
+            continue
+        if len(parts) > 1 and parts[1]:
+            # ``CEIMUX:1`` means CEIMUX.1=1, ``LSRIMUX:0`` means LSRIMUX.0=0
+            configs.add((f"{key}.{parts[1]}", parts[1]))
+    return props, configs
+
+
 def pio_site(site: str | None) -> str | None:
     """PL2A -> PIO_A; returns None for non-PIO sites."""
     if not site or site[-1] not in "ABCD":
@@ -54,11 +106,19 @@ def pio_site(site: str | None) -> str | None:
 
 
 def env_for(comps: list[Comp]) -> dict:
-    """Build a BFD expression environment for all PIO comps of one tile."""
+    """Build a BFD expression environment for all pad/IOLOGIC comps of a tile."""
     props: dict[tuple[str, str], str] = {}
     configs: dict[str, set[tuple[str, str]]] = {}
     sites: set[str] = set()
     for comp in comps:
+        site = iologic_site(comp.site)
+        if site is not None:
+            sites.add(site)
+            fields, cfgs = parse_iologic_program(comp.program)
+            for key, value in fields.items():
+                props[(site, key)] = value
+            configs.setdefault(site, set()).update(cfgs)
+            continue
         site = pio_site(comp.site)
         if site is None:
             continue
@@ -66,6 +126,11 @@ def env_for(comps: list[Comp]) -> dict:
         fields, cfgs = parse_program(comp.program)
         for key, value in fields.items():
             props[(site, f"IOBUF.{key}")] = value
+        # port selection such as ``DATAMUX:IOLDO`` (the IOLOGIC output mux)
+        for tok in comp.program.split():
+            parts = tok.split(":")
+            if len(parts) > 1 and parts[1] and "=" not in parts[1]:
+                cfgs.add((parts[0], parts[1]))
         configs.setdefault(site, set()).update(cfgs)
     return {"props": props, "configs": configs, "sites": sites}
 

@@ -102,7 +102,9 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   unknown.
 * Timing model.
 * Packer status: LUT/DFF clustering, constants and DFF CE/reset are done
-  (`xist.cc`); IO attributes are still dropped (PIO config is not synthesised).
+  (`xist.cc`); pad direction is synthesised into PIO/IOLOGIC configuration by
+  `xist/piogen.py` + `xist/pioconfig.py`, but there are no IOLOGIC bels in the
+  chipdb (registers stay in slices).
 * Bitstream writer: `xist/bitgen.py` consumes a routed JSON and emits routing +
   slice configuration (incl. CE/reset) + LUT INIT + edge PIO configuration.
   Edge-tile routing (columns 0/50) and the uncalibrated spine contexts are not

@@ -23,6 +23,8 @@ from xist.pioconfig import bits_from_equations
 from xist.piogen import PIO_IN, PIO_OUT
 from xist.bitstream import Bitstream
 from xist.lutinit import init_from_function
+from xist.bfd_expr import evaluate, parse_cached
+from xist.pioconfig import env_for
 from xist.sliceconfig import parse_slice_program
 from xist.sliceprog import slice_program
 from xist.xpn import parse_comps, parse_xpn
@@ -256,6 +258,61 @@ def test_pio_defaults_match_vendor_pads():
             assert (vendor.rows[br][bc] == "1") == val, (comp.site, br, bc)
         seen += 1
     assert seen == 3
+
+
+def _edge_config_mismatches(xpn: Path, vendor: Path, side: str, pos: int,
+                            profile: str):
+    from xist.apply import pad_group
+    from xist.bfdmap import load_calibration
+
+    cal = load_calibration()
+    profiles = json.loads((TESTDATA / "SL2-12E_bfd_profiles.json").read_text())
+    prof = profiles["profiles"][profile]
+    pio = json.loads((TESTDATA / "SL2-12E_bfd_pio.json").read_text())
+    comps = [c for c in parse_comps(xpn).values()
+             if pad_group(c.site) == (side, pos)]
+    env = env_for(comps)
+    v = Bitstream.read(str(vendor))
+    if side in "LR":
+        base, rbase, tr = (2375 if side == "L" else 60), None, pos
+    else:
+        base = cal.column_base[pos] + pio["column_delta"].get(
+            side, {}).get(str(pos), 0)
+        rbase, tr = pio["row_base"][side], pos
+    diff = []
+    for name, expr in prof["fuse_exprs"].items():
+        if "arcval" in expr:
+            continue
+        if "config(" not in expr and "property(" not in expr:
+            continue
+        if not any(f"IOLOGIC_{i}" in expr for i in range(4)) and \
+                "PIO_" not in expr:
+            continue
+        val = evaluate(parse_cached(expr), env)
+        for rr, rc in prof["fuses"].get(name, []):
+            br = (rbase if rbase is not None else 29 * (tr - 1)) + rr
+            bc = base - rc
+            if bc < 0:
+                continue
+            if (v.rows[br][bc] == "1") != val:
+                diff.append((name.split("/")[-1], br, bc, val))
+    return diff
+
+
+def test_iologic_oreg_config_matches_vendor():
+    """Counter's output-register IOLOGIC program reproduces all pad config bits."""
+    diff = _edge_config_mismatches(COUNTER_XPN, VENDOR_BIT, "B", 19, "PIC_B5")
+    assert diff == []
+
+
+def test_iologic_ireg_config_matches_vendor():
+    """An input register at the pad (IOL_L2A) reproduces the vendor config bits."""
+    xpn = TESTDATA / "SL2-12E_ireg.xpn"
+    bit = TESTDATA / "SL2-12E_ireg_vendor.bit"
+    if not bit.exists():
+        pytest.skip("vendor bitstream not available")
+    diff = _edge_config_mismatches(xpn, bit, "L", 2, "PIC_L5")
+    assert diff == []
 
 
 def test_counter_control_fuses_set(counter_replay_bit):
