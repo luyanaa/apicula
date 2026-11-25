@@ -7,9 +7,10 @@ Flow: Yosys (synth_gowin JSON) -> XIST LUT4/DFF/ALU/PIO cells -> chipdb
 The routing graph is a bring-up model: a per-tile CIB crossbar plus a complete
 1-row long-wire mesh.  Pass ``--bfd`` to add the vendor BFD routing pips for
 PLC tiles (and ``--bfd-replace`` to drop the synthetic PLC crossbar).  With
-``--bfd-replace`` a LUT/IO design routes through vendor fuse-backed pips only;
-DFF-heavy designs still need proper LUT/DFF packing (a DFF data input is fed by
-the same slice's output mux, not by a free routing arc).
+``--bfd-replace`` a LUT/IO design routes through vendor fuse-backed pips only.
+DFFs are clustered with the LUT that drives them (``pack_lut_dff``); a DFF with
+no LUT data source is rejected, because a DFF's D input is fed by the same
+slice's output mux, not by a free routing arc.
 
 Requirements: yosys in PATH, nextpnr-himbaechel built with the xist uarch.
 """
@@ -48,8 +49,11 @@ def main(argv=None) -> int:
     wd.mkdir(parents=True, exist_ok=True)
 
     # 1. Yosys generic LUT/DFF netlist
+    # -noalu: the ALU slice mode has no bitstream model yet, so adders are
+    # synthesised as LUT logic instead of ALU cells.
     r = run(["yosys", "-q", "-p",
-             f"read_verilog {args.verilog}; synth_gowin -json {wd / 'design.json'}"])
+             f"read_verilog {args.verilog}; "
+             f"synth_gowin -noalu -json {wd / 'design.json'}"])
     if r.returncode:
         print(r.stderr)
         return r.returncode

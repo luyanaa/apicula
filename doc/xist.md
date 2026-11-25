@@ -616,9 +616,58 @@ reset/set/clock-enable and polarity become cell parameters (``RESET``,
 ``RESET_POLARITY``, ``SET``, ``CE``, ``CLK_POLARITY``) mirroring the vendor slice
 program, and ``VCC``/``GND`` cells are kept rather than skipped.
 
-Still open: this nextpnr revision has no cluster API, so the uarch cannot force
-a DFF next to its LUT.  Legality is enforced, pairing is not - a real packer is
-required for DFF-heavy designs.
+### LUT/DFF packing
+
+The DFF data-path rule is satisfiable only if the placer puts the DFF in the
+same slice bank as the LUT that drives it.  This nextpnr revision has no
+``createCluster``/``addCellToCluster`` helper, but clusters are just the
+``CellInfo::cluster``/``constr_children`` fields, so `xist.cc` builds them
+directly in ``pack()``:
+
+```
+lut->cluster = lut->name;              // root cell names the cluster
+dff->cluster = lut->name;
+dff->constr_x = dff->constr_y = 0;
+dff->constr_z = 2;                     // LUT<n> at 4s+n, DFF<n> at 4s+2+n
+lut->constr_children.push_back(dff);
+```
+
+Every PLC tile has the same z layout (``LUT<n>`` at ``4s+{0,1}``, ``DFF<n>`` at
+``4s+{2,3}``), so the offset is a constant.  The placer's cluster machinery then
+places both cells together and ``isBelLocationValid()`` accepts the DFF.
+
+A DFF whose ``D`` comes straight from a pad or another register has no LUT in
+its bank (``DI`` is driven only by ``OFX``).  The packer inserts the identity
+LUT the vendor would use - ``INIT = 0xAAAA``, buffer on ``I[0]`` - and clusters
+it like any other pair.  A shift register is thereby one LUT + one DFF per
+stage:
+
+```
+$ python -m xist.demo_any shift8.v --bfd-replace
+Info: XIST: packed 8 LUT+DFF slices, 0 DFF with no LUT source
+Info: Routing complete.
+```
+
+Constants also have to be handled, because the fabric has no VCC source: the
+BFD only lists ``GND`` arcs, e.g. ``GND->M0``.  ``pack_constants()`` turns the
+``VCC``/``GND`` cells into constant nets and folds them into the consuming LUT's
+``INIT`` (the same transformation Gowin's packer does), then drops the port.  An
+unconnected LUT input reads 0, so a VCC tie is folded as "evaluate the function
+with that input at 1".  Any remaining constant use is rejected:
+
+```
+ERROR: constant net ... drives ALU/I3; XIST has no VCC source
+```
+
+Still open:
+
+* ``CE``/reset/set use the slice-level ``CEMUX``/``LSRMUX`` muxes.  The chipdb
+  DFF bel has only ``D``/``CLK``/``Q``, so the packer rejects those cells with a
+  clear error instead of routing them to a non-existent pin.
+* ALU slice mode has no programming model yet; `demo_any` synthesises with
+  ``synth_gowin -noalu`` so adders become LUT logic.
+* The ``OFX`` mux (which feeds ``DI``) does not appear in the BFD exports, so a
+  DFF bitstream cannot be written until that mux is extracted.
 
 ### PIO configuration model
 
@@ -701,10 +750,11 @@ them) and some have clock/DCC sites.  Their routing profiles are in
 `SL2-12E_bfd_profiles.json`, but their 2-column / 6-row bit mapping is not
 calibrated, so they remain synthetic in the router.
 
-DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
-mode: their data input is the slice output mux (`OFX -> DI`), so they require
-LUT/DFF packing that the bring-up uarch does not do yet.  `--bfd` (additive)
-still routes the full corpus 10/10.
+DFF-heavy designs route in BFD-only mode now that the packer clusters each
+DFF with its LUT: `dff_chain`, `shift8` (8 stages, identity LUT per stage) and
+`adder4` route.  `counter8` is rejected because its `DFFE` needs the
+`CEMUX`/`LSRMUX` slice muxes, which are not modelled.  `--bfd` (additive) still
+routes the full corpus 10/10.
 
 Tile columns 0 and 50 have no bitstream columns of their own: their I/O cells
 are configured through the neighbouring 59-column block (hence the base for
