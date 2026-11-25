@@ -73,11 +73,13 @@ def test_dff_semantics_preserved():
     # the clock edge is inverted in DFFN*, the reset sense is not
     assert out["d4"]["parameters"]["RESET_POLARITY"] == "1"
     assert "R" in out["d4"]["connections"] and "CE" in out["d4"]["connections"]
-    assert out["d5"]["parameters"] == {"RESET": "1", "RESET_POLARITY": "1",
-                                       "CE": "1"}
+    assert out["d5"]["parameters"]["RESET"] == "1"
+    assert out["d5"]["parameters"]["RESET_ASYNC"] == "1"   # DFFC is async
+    assert out["d5"]["parameters"]["CE"] == "1"
     assert {"R", "CE", "D", "CLK", "Q"} <= set(out["d5"]["connections"])
-    assert out["d6"]["parameters"] == {"SET": "1", "SET_POLARITY": "1",
-                                       "CE": "1"}
+    assert out["d6"]["parameters"]["SET"] == "1"
+    assert out["d6"]["parameters"]["RESET_ASYNC"] == "1"   # DFFP is async
+    assert out["d6"]["parameters"]["CE"] == "1"
     assert "S" in out["d6"]["connections"]
 
 

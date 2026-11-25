@@ -38,11 +38,15 @@ DFF_TYPES = {"DFF", "DFFR", "DFFS", "DFFE", "DFFRE", "DFFSE",
              "DFFN", "DFFNR", "DFFNS", "DFFNE", "DFFNRE", "DFFNSE",
              "DFFC", "DFFCE", "DFFNC", "DFFNCE",
              "DFFP", "DFFPE", "DFFNP", "DFFNPE"}
-# Gowin's DFFC/DFFP spell the reset/set ports CLEAR/PRESET
-DFF_RESET = {"DFFR", "DFFRE", "DFFNR", "DFFNRE",
-             "DFFC", "DFFCE", "DFFNC", "DFFNCE"}
-DFF_SET = {"DFFS", "DFFSE", "DFFNS", "DFFNSE",
-           "DFFP", "DFFPE", "DFFNP", "DFFNPE"}
+# Two different reset semantics, per the Gowin simulation models:
+#   DFFR/DFFS (port RESET/PRESET) -> sampled on the clock edge  => synchronous
+#   DFFC/DFFP (port CLEAR/PRESET) -> combinational path         => asynchronous
+DFF_RESET_SYNC = {"DFFR", "DFFRE", "DFFNR", "DFFNRE"}
+DFF_RESET_ASYNC = {"DFFC", "DFFCE", "DFFNC", "DFFNCE"}
+DFF_SET_SYNC = {"DFFS", "DFFSE", "DFFNS", "DFFNSE"}
+DFF_SET_ASYNC = {"DFFP", "DFFPE", "DFFNP", "DFFNPE"}
+DFF_RESET = DFF_RESET_SYNC | DFF_RESET_ASYNC
+DFF_SET = DFF_SET_SYNC | DFF_SET_ASYNC
 DFF_CE = {"DFFE", "DFFRE", "DFFSE", "DFFNE", "DFFNRE", "DFFNSE",
           "DFFCE", "DFFNCE", "DFFPE", "DFFNPE"}
 
@@ -97,17 +101,19 @@ def convert(module: dict) -> dict:
                 params_out["CLK_POLARITY"] = "0"
             # reset / set: R/S and the CLEAR/PRESET aliases of DFFC/DFFP
             if typ in DFF_RESET:
-                pin = "CLEAR" if "CLEAR" in conn else "R"
-                if pin in conn:
+                pin = next((p for p in ("CLEAR", "RESET", "R") if p in conn), None)
+                if pin is not None:
                     new_conn["R"] = conn[pin]
                     params_out["RESET"] = "1"
                     params_out["RESET_POLARITY"] = "1"
+                    params_out["RESET_ASYNC"] = "1" if typ in DFF_RESET_ASYNC else "0"
             if typ in DFF_SET:
-                pin = "PRESET" if "PRESET" in conn else "S"
-                if pin in conn:
+                pin = next((p for p in ("PRESET", "S") if p in conn), None)
+                if pin is not None:
                     new_conn["S"] = conn[pin]
                     params_out["SET"] = "1"
                     params_out["SET_POLARITY"] = "1"
+                    params_out["RESET_ASYNC"] = "1" if typ in DFF_SET_ASYNC else "0"
             if typ in DFF_CE and "CE" in conn:
                 new_conn["CE"] = conn["CE"]
                 params_out["CE"] = "1"

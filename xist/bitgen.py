@@ -109,7 +109,7 @@ def routed_cells(routed: dict) -> dict[tuple[int, int],
         letter = SLICE_LETTERS[bank // 2]
         slot = out.setdefault((row, col), {}).setdefault(
             letter, {"luts": set(), "dffs": set(), "inits": {},
-                     "reset": False, "ce": False})
+                     "reset": False, "ce": False, "reset_async": False})
         if typ == "LUT4":
             slot["luts"].add(bank % 2)
             init = cell.get("parameters", {}).get("INIT", "0")
@@ -117,9 +117,15 @@ def routed_cells(routed: dict) -> dict[tuple[int, int],
         else:
             dff_bank = bank % 2
             slot["dffs"].add(dff_bank)
+            params = cell.get("parameters", {})
             conns = cell.get("connections", {})
             slot["reset"] = slot["reset"] or bool(conns.get("R")) or bool(conns.get("S"))
             slot["ce"] = slot["ce"] or bool(conns.get("CE"))
+            # DFFR/DFFS are synchronous, DFFC/DFFP asynchronous; the converter
+            # records which in RESET_ASYNC.
+            if slot["reset"]:
+                slot["reset_async"] = slot.get("reset_async") or \
+                    params.get("RESET_ASYNC", "1") != "0"
     return out
 
 
@@ -127,7 +133,8 @@ def slice_facts(slot: dict) -> SliceFacts:
     return SliceFacts(luts=tuple(sorted(slot["luts"])),
                       dffs=tuple(sorted(slot["dffs"])),
                       sd_from_lut=True,
-                      reset=slot["reset"], reset_is_async=True,
+                      reset=slot["reset"],
+                      reset_is_async=slot.get("reset_async", True),
                       ce=slot["ce"])
 
 

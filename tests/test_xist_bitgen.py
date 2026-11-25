@@ -50,7 +50,8 @@ def xpn_view(path: Path):
         props, cfgs, funcs = parse_slice_program(comp.program)
         slot = cells.setdefault((row, col), {}).setdefault(
             letter, {"luts": set(), "dffs": set(), "inits": {},
-                     "reset": False, "ce": False, "sync_reset": False})
+                     "reset": False, "ce": False, "sync_reset": False,
+                     "reset_async": False})
         for bank, key in ((0, "K0"), (1, "K1")):
             if key in funcs:
                 slot["luts"].add(bank)
@@ -62,6 +63,9 @@ def xpn_view(path: Path):
         slot["reset"] = slot["reset"] or any(k == "LSRMUX.LSR" for k, _ in cfgs)
         slot["ce"] = slot["ce"] or any(k == "CEMUX.CE" for k, _ in cfgs)
         slot["sync_reset"] = ("SRMODE", "LSR_OVER_CE") in cfgs
+        # the XPN says which mode the vendor used; the routed-JSON path reads it
+        # from the cell parameter instead, so feed it through the same field
+        slot["reset_async"] = not slot["sync_reset"]
 
     pips: dict = {}
     for sig in parse_xpn(path).values():
@@ -75,31 +79,14 @@ def xpn_view(path: Path):
     return pips, cells
 
 
-def _patch_sync_reset(monkeypatch):
-    orig = slice_facts
-
-    def facts(slot):
-        f = orig(slot)
-        if slot.get("sync_reset"):
-            f.reset_is_async = False
-        return f
-
-    monkeypatch.setattr("xist.bitgen.slice_facts", facts)
-
-
 @pytest.fixture(scope="module")
 def counter_replay_bit(tmp_path_factory):
     """Replay counter.xpn once: its slices use a synchronous reset + CE."""
     if not (VENDOR_BIT.exists() and EMPTY_BIT.exists()):
         pytest.skip("vendor bitstreams not available")
-    mp = pytest.MonkeyPatch()
-    _patch_sync_reset(mp)
-    try:
-        pips, cells = xpn_view(COUNTER_XPN)
-        out = tmp_path_factory.mktemp("replay") / "replay.bit"
-        write_bitstream(EMPTY_BIT, out, pips=pips, cells=cells, verbose=False)
-    finally:
-        mp.undo()
+    pips, cells = xpn_view(COUNTER_XPN)
+    out = tmp_path_factory.mktemp("replay") / "replay.bit"
+    write_bitstream(EMPTY_BIT, out, pips=pips, cells=cells, verbose=False)
     return out
 
 
@@ -408,6 +395,51 @@ def test_ddr_pad_config_matches_vendor(name, profile, prog):
     diff = [(br, bc) for br, bc, val in bits
             if bc >= 0 and (vendor.rows[br][bc] == "1") != val]
     assert diff == [], f"{len(diff)} mismatching PIO/IOLOGIC bits {diff[:6]}"
+
+
+@pytest.mark.skipif(shutil.which("yosys") is None or not NEXTPNR.exists(),
+                    reason="needs yosys and a built nextpnr-himbaechel")
+def test_sync_and_async_reset_produce_different_srmode(tmp_path):
+    """DFFR (synchronous reset) and DFFC (async) must differ in SRMODE."""
+    from xist.demo_any import main as demo
+    from xist.bfdmap import load_calibration
+
+    cal = load_calibration()
+    sl = json.loads(SLICEJSON.read_text())["fuses"]
+    results = {}
+    for kind, body in (
+            ("sync", "always @(posedge clk) if (rst) q <= 1'b0; else q <= a & b;"),
+            ("async", "always @(posedge clk or posedge rst) if (rst) q <= 1'b0; "
+                      "else q <= a & b;")):
+        src = tmp_path / f"{kind}.v"
+        src.write_text(
+            "module top(input clk, input rst, input a, input b, input x,"
+            " output out);\n  reg q;\n  " + body + "\n"
+            "  assign out = q ^ x;\nendmodule\n")
+        wd = tmp_path / f"w_{kind}"
+        assert demo([str(src), "--bfd-replace", "--workdir", str(wd),
+                     "--nextpnr", str(NEXTPNR)]) == 0
+        routed = json.loads((wd / "routed.json").read_text())
+        out = tmp_path / f"{kind}.bit"
+        write_bitstream(EMPTY_BIT, out, routed=routed, verbose=False)
+        bs = Bitstream.read(str(out))
+        for cell in list(routed["modules"].values())[0]["cells"].values():
+            if cell["type"] != "DFF" or "PAD_REG" in cell.get("parameters", {}):
+                continue
+            m = re.match(r"X(\d+)Y(\d+)/DFF(\d)$",
+                         cell["attributes"]["NEXTPNR_BEL"])
+            if not m:
+                continue
+            col, row, bank = (int(x) for x in m.groups())
+            site = f"SLICE_{SLICE_LETTERS[bank // 2]}"
+            for name, info in sl.items():
+                if site not in info["expr"]:
+                    continue
+                if not name.split("/")[-1].startswith("MC1_ASYNCMODE"):
+                    continue
+                br, bc = cal.bit(row, col, *info["positions"][0])
+                results[kind] = bs.rows[br][bc]
+    assert results == {"sync": "0", "async": "1"}, results
 
 
 def test_counter_control_fuses_set(counter_replay_bit):
