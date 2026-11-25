@@ -193,6 +193,8 @@ def test_own_routed_ce_reset_design(tmp_path):
     for cell in list(routed["modules"].values())[0]["cells"].values():
         if cell["type"] != "DFF":
             continue
+        if "PAD_REG" in cell.get("parameters", {}):
+            continue        # lives in the pad's IOLOGIC, not in a slice
         bel = cell.get("attributes", {}).get("NEXTPNR_BEL", "")
         m = re.match(r"X(\d+)Y(\d+)/DFF(\d)$", bel)
         if not m:
@@ -212,12 +214,14 @@ def test_own_routed_ce_reset_design(tmp_path):
                         assert bit_of(row, col, rr, rc) == "1"
                     checked += 1
 
-        # slice configuration: one REGSET per bank, LSR mux on, async mode
+        # slice configuration: REGSET is written only for the used bank (the
+        # vendor leaves the other bank's fuse at 0), LSR mux on, async mode
+        bank = int(bel.split("DFF")[1])
         for name, info in sl.items():
             if site not in info["expr"]:
                 continue
             last = name.split("/")[-1]
-            if last in ("MC1_SR_0", "MC1_SR_1"):
+            if last == f"MC1_SR_{bank % 2}":
                 for rr, rc in info["positions"]:
                     assert bit_of(row, col, rr, rc) == "1"
             elif last == "MC1_NOLSR":
@@ -313,6 +317,63 @@ def test_iologic_ireg_config_matches_vendor():
         pytest.skip("vendor bitstream not available")
     diff = _edge_config_mismatches(xpn, bit, "L", 2, "PIC_L5")
     assert diff == []
+
+
+@pytest.mark.skipif(shutil.which("yosys") is None or not NEXTPNR.exists(),
+                    reason="needs yosys and a built nextpnr-himbaechel")
+def test_output_register_packs_into_iologic(tmp_path):
+    """A register that only drives a pad moves into the pad's IOLOGIC block."""
+    src = tmp_path / "reg_out.v"
+    src.write_text(
+        "module top(input clk, input a, input b, output reg q);\n"
+        "  always @(posedge clk) q <= a & b;\n"
+        "endmodule\n")
+    from xist.demo_any import main as demo
+
+    assert demo([str(src), "--bfd-replace", "--workdir", str(tmp_path / "w"),
+                 "--nextpnr", str(NEXTPNR)]) == 0
+    routed = json.loads((tmp_path / "w" / "routed.json").read_text())
+    cells = list(routed["modules"].values())[0]["cells"]
+
+    pad_reg = [c for c in cells.values()
+               if c["type"] == "DFF" and "PAD_REG" in c.get("parameters", {})]
+    assert len(pad_reg) == 1, "output register was not packed into IOLOGIC"
+    bel = pad_reg[0]["attributes"]["NEXTPNR_BEL"]
+    assert "/IOLO" in bel, bel
+
+    out = tmp_path / "reg_out.bit"
+    res = write_bitstream(EMPTY_BIT, out, routed=routed, verbose=False)
+    assert res["pio"] > 0
+
+    # the pad now takes its data from IOLDO, and the IOLOGIC output register is
+    # enabled in the edge profile fuses
+    from xist.bfd_expr import evaluate, parse_cached
+    from xist.pioconfig import env_for
+    from xist.piogen import iologic_comps, pio_comps
+
+    side = "L" if "Y2" in bel and "X0" in bel else None
+    profiles = json.loads((TESTDATA / "SL2-12E_bfd_profiles.json").read_text())
+    prof = profiles["profiles"]["PIC_L5"]
+    comps = [c for c in pio_comps(routed) + iologic_comps(routed)
+             if c.site.startswith("PL") or c.site.startswith("IOL_L")]
+    env = env_for(comps)
+    bs = Bitstream.read(str(out))
+    from xist.bfdmap import load_calibration
+    cal = load_calibration()
+    row, col = int(bel.split("Y")[1].split("/")[0]), int(bel[1:].split("Y")[0])
+    base = 2375
+    checked = 0
+    for name in ("MC1_OUTFF_0", "MC1_OUTCE_EN_0", "MC1_OUTCLK_EN_0"):
+        fuse = next(k for k in prof["fuse_exprs"] if k.endswith("/" + name))
+        assert evaluate(parse_cached(prof["fuse_exprs"][fuse]), env) is True
+        for rr, rc in prof["fuses"][fuse]:
+            br = 29 * (row - 1) + rr
+            bc = base - rc
+            if bc < 0:
+                continue
+            assert bs.rows[br][bc] == "1", (name, br, bc)
+            checked += 1
+    assert checked > 0
 
 
 def test_counter_control_fuses_set(counter_replay_bit):

@@ -140,15 +140,29 @@ def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
         # Vendor XPN names: input data JDIx, input mux JPADDIx_PIO,
         # fabric->pad mux JPADDOx, pad data PADDOx_PIO.
         for w in (f"PAD_{slot}", f"JDI{slot}", f"JPADDI{slot}_PIO",
-                  f"JPADDO{slot}", f"PADDO{slot}_PIO", f"OE_{slot}"):
+                  f"JPADDO{slot}", f"PADDO{slot}_PIO", f"OE_{slot}",
+                  f"IOLDO{slot}", f"JOPOS{slot}", f"JIN{slot}",
+                  f"JCLK{slot}", f"JCE{slot}", f"JLSR{slot}"):
             tt.create_wire(w)
         b = tt.create_bel(f"PIO_{slot}", "PIO", s)
         tt.add_bel_pin(b, "PAD", f"PAD_{slot}", PinType.INOUT)
         tt.add_bel_pin(b, "PADDI", f"JDI{slot}", PinType.OUTPUT)
         tt.add_bel_pin(b, "PADDO", f"PADDO{slot}_PIO", PinType.INPUT)
+        tt.add_bel_pin(b, "IOLDO", f"IOLDO{slot}", PinType.INPUT)
         tt.add_bel_pin(b, "OE", f"OE_{slot}", PinType.INPUT)
         tt.create_pip(f"JDI{slot}", f"JPADDI{slot}_PIO")
         tt.create_pip(f"JPADDO{slot}", f"PADDO{slot}_PIO")
+        # IOLOGIC output register.  Its data comes from the fabric through
+        # JOPOS (wired to the adjacent CIB A<s>), its Q drives PIO IOLDO, and
+        # the clock/reset/enable come from the CIB's CLK/LSR/CE nets.  It is
+        # typed as DFF so nextpnr's DFF bucket can place a register there.
+        reg = tt.create_bel(f"IOLO{slot}", "DFF", 4 + s)
+        tt.add_bel_pin(reg, "D", f"JOPOS{slot}", PinType.INPUT)
+        tt.add_bel_pin(reg, "CLK", f"JCLK{slot}", PinType.INPUT)
+        tt.add_bel_pin(reg, "CE", f"JCE{slot}", PinType.INPUT)
+        tt.add_bel_pin(reg, "R", f"JLSR{slot}", PinType.INPUT)
+        tt.add_bel_pin(reg, "S", f"JLSR{slot}", PinType.INPUT)
+        tt.add_bel_pin(reg, "Q", f"IOLDO{slot}", PinType.OUTPUT)
 
 
 def _add_hard_tile_type(chip: Chip, name: str) -> None:
@@ -370,8 +384,58 @@ def build_chip(part: str, report: DeviceReport,
             pkg.create_pad(pin.get("io", ""), f"X{col}Y{row}",
                            f"PIO_{slot}", pin.get("desc", "").strip(), bank)
 
+    _wire_pad_iologic(chip, report, ctx)
     return XistChip(chip, part, family_for(part), luts, columns,
                     routing_fuses=routing_fuses, bitcol_base=bitcol_base)
+
+
+def _wire_pad_iologic(chip: Chip, report: DeviceReport,
+                      ctx: dict[tuple[int, int], str]) -> None:
+    """Join pad IOLOGIC pins to the adjacent CIB tile.
+
+    The device database wires the pad's IOLOGIC directly to the neighbouring
+    CIB: ``JOPOS<i>``/``JIN<i>`` alias the CIB's ``A<i>``/``F<i>``, and
+    ``JCLK<i>``/``JLSR<i>``/``JCE<i>`` alias ``CLK<i>``/``LSR<i>``/``CE<i>``
+    (measured from the vendor counter and registered-input XPN exports).  There
+    is no fuse; model it as a node.
+    """
+    rows, cols = report.rows, report.cols
+    adj = {}
+    for r, row in enumerate(report.tiles):
+        for c, tok in enumerate(row):
+            if not tok or tok == ".":
+                continue
+            if r == 0:
+                adj[(r, c)] = (1, c)
+            elif r == rows - 1:
+                adj[(r, c)] = (rows - 2, c)
+            elif c == 0:
+                adj[(r, c)] = (r, 1)
+            elif c == cols - 1:
+                adj[(r, c)] = (r, cols - 2)
+    # pad wires are letter-indexed (JOPOSA..D); the CIB wires are digit-indexed
+    pairs = []
+    for i, slot in enumerate("ABCD"):
+        pairs += [(f"JOPOS{slot}", f"A{i}"), (f"JIN{slot}", f"F{i}"),
+                  (f"JCLK{slot}", f"CLK{i}"), (f"JLSR{slot}", f"LSR{i}"),
+                  (f"JCE{slot}", f"CE{i}")]
+    for (r, c), (r2, c2) in adj.items():
+        if not (0 <= r2 < rows and 0 <= c2 < cols):
+            continue
+        tok = ctx.get((r, c))
+        tok2 = ctx.get((r2, c2))
+        if not tok or not tok2 or tok == "EMPTY" or tok2 == "EMPTY":
+            continue
+        tt = chip.tile_types[chip.tile_type_idx[tok]]
+        tt2 = chip.tile_types[chip.tile_type_idx[tok2]]
+        for pad_wire, cib_wire in pairs:
+            if not tt.has_wire(pad_wire) or not tt2.has_wire(cib_wire):
+                continue
+            try:
+                chip.add_node([NodeWire(c, r, pad_wire),
+                               NodeWire(c2, r2, cib_wire)])
+            except AssertionError:
+                pass
 
 
 def _seed_long_wires(chip: Chip) -> None:

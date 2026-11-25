@@ -729,10 +729,9 @@ Still open:
 * The ``PIC`` tiles in columns 0/50 have no BFD routing profile, so nets that
   pass through an edge tile (left/right pads) keep the template routing value.
   Pad *configuration* is written; edge routing fuses are not.
-* IOLOGIC cells are not in the chipdb: registers stay in slices and the pad's
-  IOLOGIC block is written off.  Its *configuration model* is implemented and
-  bit-exact against vendor OREG/IREG designs (see above); DDR/register-in-I/O
-  packing is not.
+* IOLOGIC *output* registers are modelled end to end (bel, packing, program,
+  fuses; bit-exact against a vendor oracle).  The IOLOGIC input register and
+  DDR modes are not.
 
 ### Bitstream writer from routed JSON
 
@@ -855,13 +854,41 @@ IREG  registered input, PL2A        191/191 bits
 `testdata/SL2-12E_ireg.xpn` + `SL2-12E_ireg_vendor.bit` are a vendor oracle with
 the input register packed into ``IOL_L2A``.
 
-What is **not** modelled: the IOLOGIC cells themselves.  There are no IOLOGIC
-bels in the chipdb, so a register stays a slice DFF and the pad is configured
-with the IOLOGIC block off (all such fuses written 0).  DDR primitives could not
-be used as an oracle because the vendor RTL analyzer rejects ``ODDR``/``IDDR``/
-``ODDRX1`` instances ("Module ... is not found"); the vendor only creates
-IOLOGIC registers as an optimisation of ordinary RTL.  Replicating that
-optimisation, or adding DDR cells, is a separate packing feature.
+### Output registers in the IOLOGIC block
+
+The chipdb's edge tile types have an ``IOLO<s>`` bel (typed ``DFF``, z ``4+s``)
+whose data comes from ``JOPOS<s>`` and whose ``Q`` drives the pad's ``IOLDO``.
+``JOPOS<s>``/``JIN<s>``/``JCLK<s>``/``JLSR<s>``/``JCE<s>`` are joined to the
+adjacent CIB's ``A<i>``/``F<i>``/``CLK<i>``/``LSR<i>``/``CE<i>`` by a node (no
+fuse; measured from the vendor counter and registered-input exports).
+
+`xist.cc` then moves a register into the pad (`pack_pad_regs`): if a DFF is the
+only driver of a PIO's ``PADDO``, the pad switches to ``IOLDO``, the DFF is
+tagged ``PAD_REG`` and clustered at ``constr_z = 4``.  `isBelLocationValid()`
+rejects a ``PAD_REG``-less DFF on ``IOLO`` and vice versa, so the two stay
+consistent.
+
+`xist/piogen.py` synthesises the matching pad program
+(``DATAMUX:IOLDO``) and the IOLOGIC program
+(``OUTREG:::REGSET=RESET,GSR=ENABLED,SRMODE=ASYNC,OUTREGMODE=FF IOLDO:IOLDO
+MODE:IREG_OREG CEOMUX:1 LSROMUX:0 CLKOMUX:CLK:::0=0,CLK=#SIG OPOSMUX:OPOS``,
+which the vendor calls ``IREG_OREG`` even for an output register), so the edge
+profile's ``OUTFF``/``OUTCE_EN``/``OUTCLK_EN`` fuses are written.
+
+Verified against a new vendor oracle (`SL2-12E_oreg.xpn` + bitstream: a design
+whose only register drives a pad, so the vendor packs it into ``IOL_B19A``):
+
+```
+edge config fuses for the pad position   315 / 315 bits
+our flow places the DFF on X0Y2/IOLOA and routes D -> JOPOSA
+OUTFF_0 / OUTCE_EN_0 / OUTCLK_EN_0       1 / 1 / 1, matching the equations
+```
+
+What is **not** modelled: the IOLOGIC *input* register and DDR modes.  The
+vendor RTL analyzer rejects ``ODDR``/``IDDR``/``ODDRX1`` instances ("Module ...
+is not found"), so no DDR oracle can be produced from RTL; the vendor only
+creates IOLOGIC registers as an optimisation, which the output-register packer
+now reproduces.
 
 ### PIO configuration model
 

@@ -42,7 +42,7 @@ from .build import (TESTDATA, _set, program_lut_inits, program_plc_used,
 from .chipdb import _context_name, default_bfd_profiles
 from .device import parse_udev_report
 from .sliceprog import SliceFacts, slice_program
-from .piogen import pio_comps
+from .piogen import iologic_comps, pio_comps
 from .xpn import Comp
 
 _XY = re.compile(r"X(\d+)Y(\d+)")
@@ -202,6 +202,7 @@ def write_bitstream(base: str | Path, out: str | Path, *,
                                       used=pips.get((row, col), set()))
 
     pio_list = pio_comps(routed) if routed is not None else []
+    pio_list += iologic_comps(routed) if routed is not None else []
     edge_eqs = {side: profile_config_equations(profiles[PROFILE[side]])
                 for side in "LRTB"}
     npio = apply_pio_comps(bs, pio_list, calibration=cal,
