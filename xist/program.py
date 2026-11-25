@@ -163,6 +163,27 @@ def program_routing(bs: Bitstream, xpn_path: str | Path, tile, cal,
     return n
 
 
+def program_pio(bs: Bitstream, xpn_path: str | Path, equations,
+                tile_row: int, col_base: int, side: str) -> int:
+    """Program one edge tile's PIO configuration from the XPN component data."""
+    from .pioconfig import bits_from_equations
+    from .xpn import parse_comps
+    comps = []
+    for comp in parse_comps(xpn_path).values():
+        site = comp.site
+        if not site or len(site) < 4 or site[0] != "P" or site[1] != side:
+            continue
+        if not site[2:-1].isdigit() or int(site[2:-1]) != tile_row:
+            continue
+        comps.append(comp)
+    n = 0
+    for (br, bc, val) in bits_from_equations(equations, comps, tile_row, col_base):
+        if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+            _set(bs, br, bc, val)
+            n += 1
+    return n
+
+
 def pips_from_xpn(path: str | Path) -> set[tuple[str, str]]:
     pips = set()
     for sig in parse_xpn(path).values():

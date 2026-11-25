@@ -58,6 +58,14 @@ class XistChip:
             "col_rule": self.COL_RULE,
             "bitcol_base": ({str(k): v for k, v in self.bitcol_base.items()}
                             if self.bitcol_base else None),
+            # PIO configuration is not a routing arc: the writer evaluates the
+            # stored property()/config() equations against the XPN comp program.
+            "pio_config": {
+                "PIC": {"profile": "PIC_L5", "col_base": 2375},
+                "PIC_right": {"profile": "PIC_R5", "col_base": 60},
+                "file": "SL2-12E_bfd_pio.json",
+                "site_rule": "XPN site P<side><row><slot> -> BFD site PIO_<slot>",
+            },
         }
         Path(path).write_text(json.dumps(meta, indent=2) + "\n")
 

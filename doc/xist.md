@@ -435,9 +435,38 @@ INDEL appears in the BFD routing equations (`!arcval(PIO,JDI) && wire(JDI)`);
 the rest are PIO configuration (direction, IO standard, pull), which the BFD
 routing export does not model.
 
-The measurements are in `testdata/SL2-12E_pio_probe.json`.  PIC fusion stays
-disabled until the PIO configuration model exists and the output mode is probed
-with a controlled tristate/OE design.
+The raw measurements are in `testdata/SL2-12E_pio_probe.json`.
+
+### PIO configuration model
+
+The probe bits are not routing arcs; they are `property()`/`config()` rules in
+the BFD, e.g.
+
+```
+MC12_RD_A    = ... && config(PIO_A,PADDI,"PADDI")
+MC12_CLAMP_A = property(PIO_A,IOBUF.CLAMP,"ON") && config(PIO_A,PADDI,"PADDI")
+```
+
+`xist/bfd_expr.py` parses/evaluates that Boolean grammar, `xist/xpn.py`
+`parse_comps()` reads the component program strings (`PADDI:PADDI`,
+`IOBUF:::PULLMODE=DOWN,IO_TYPE=LVCMOS25,...`), and `xist/pioconfig.py` maps the
+placement site (`PL2A`) to the BFD site (`PIO_A`) and returns every configuration
+fuse for the tile.  The profiles are stored in
+`testdata/SL2-12E_bfd_pio.json` (PIC_L5 / PIC_R5, 220/236 fuses).
+
+Bit column base: left edge 2375, right edge 60; row rule unchanged.
+
+Validation, read-only (evaluate the equations and compare with the vendor
+bitstream) and through the writer (`program_pio` into an unrelated `.bit`):
+
+```
+1789 edge tile groups
+411404 / 411404 PIO configuration bits (100.000%)
+```
+
+This covers `PIC` (column 0) and `PIC_right` (column 50) inputs and outputs.
+`PIC_top/bot` still need their row base and profile; `-12k` corners are not
+mapped.
 
 DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
 mode: their data input is the slice output mux (`OFX -> DI`), so they require

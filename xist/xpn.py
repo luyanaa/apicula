@@ -15,6 +15,10 @@ _SIGNAL_RE = re.compile(r'signal\s+(?:"([^"]+)"|([^\s{]+))\s*\{', re.S)
 _PIN_RE = re.compile(r'\(\s*"?([^",]+)"?\s*,\s*([^)]+)\)')
 _ROUTE_LINE_RE = re.compile(r'^\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*[,;]?\s*$')
 _TILE_RE = re.compile(r"^(R\d+C\d+)_(.+)$")
+_COMP_RE = re.compile(r'comp\s+(?:"([^"]+)"|([A-Za-z_][\w.$]*))\s*\{')
+_SITE_RE = re.compile(r"\bsite\s+([A-Za-z0-9_]+);")
+_PROGRAM_RE = re.compile(r"\bprogram(.*?);", re.S)
+_QUOTED_RE = re.compile(r'"([^"]*)"')
 
 
 @dataclass
@@ -36,6 +40,37 @@ def wire_tile(wire: str) -> tuple[int, int] | None:
 def wire_local(wire: str) -> str:
     m = _TILE_RE.match(wire)
     return m.group(2) if m else wire
+
+
+@dataclass
+class Comp:
+    name: str
+    site: str | None
+    program: str
+
+
+def parse_comps(path: str | Path) -> dict[str, Comp]:
+    """Parse the ``comp`` blocks of an XPN: name, placement site, program."""
+    text = Path(path).read_text(encoding="utf-8", errors="replace")
+    comps: dict[str, Comp] = {}
+    for m in _COMP_RE.finditer(text):
+        name = m.group(1) or m.group(2)
+        i, depth = m.end(), 1
+        while i < len(text) and depth:
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+            i += 1
+        body = text[m.end():i - 1]
+        sm = _SITE_RE.search(body)
+        prog = ""
+        pm = _PROGRAM_RE.search(body)
+        if pm:
+            prog = " ".join(q.rstrip("\\ \n")
+                            for q in _QUOTED_RE.findall(pm.group(1)))
+        comps[name] = Comp(name, sm.group(1) if sm else None, prog)
+    return comps
 
 
 def parse_xpn(path: str | Path) -> dict[str, Signal]:

@@ -83,10 +83,15 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   support that form, but the PIO mapping itself is not settled.  A 87-site
   probe campaign (see doc/xist.md) found that the input-mode bit pattern is
   stable per (side, slot) across rows and reproduces 1283/1289 corpus bits
-  (99.53%).  Most of those bits are PIO configuration, not BFD routing arcs;
-  output-mode patterns are unstable because the probe diff still contains the
-  output routing.  Measurements are in `testdata/SL2-12E_pio_probe.json`;
-  PIC fusion stays off until the PIO config model exists.
+  (99.53%).  Most of those bits are PIO configuration, not BFD routing arcs; the BFD
+  `property()`/`config()` equations are now evaluated directly
+  (`xist/bfd_expr.py`, `xist/pioconfig.py`, profiles in
+  `testdata/SL2-12E_bfd_pio.json`).  Left and right edge pads match the vendor
+  bitstream exactly: 411404/411404 configuration bits over 1789 tile groups,
+  both read-only and through `program_pio`.  The sidecar points the writer at
+  the profile (`pio_config`).
+  Remaining: PIC_top/bot need their row base and profile; the `-12k` corners
+  are not mapped.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch
