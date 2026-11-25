@@ -13,7 +13,16 @@ need two per-tile measurements:
 * **varmap**: which minterm bit each LUT input (A/B/C/D) drives.  Measured by
   matching a known function against a vendor bitstream.
 
-F0 holds K0/H0 and F1 holds K1/H1; F1 is the F0 slot shifted two rows up.
+The BFD layout is a tile-type constant and directly usable: SRAM word ``addr``
+lands at ``ram_row = base_row - (addr & 1)``, ``ram_col = base_col - (addr >> 1)``
+for every PLC instance.  Minterm *j* of the truth table is SRAM word *j*.
+
+Note on the old probe results: they suggested a per-tile permutation, but that
+was the vendor re-encoding the function with a different A..D association per
+tile (visible when reading the probe's own XPN, e.g. ``K0=(B*(A*(D*C)))`` for
+``A*B*C*D``).  Evaluating the XPN's own expression with this identity map
+reproduces the vendor bitstream exactly (21664/21664 bits over the corpus), so
+no per-tile calibration is needed.
 """
 
 from __future__ import annotations

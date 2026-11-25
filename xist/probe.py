@@ -50,7 +50,7 @@ def run_lut_probe(part: str, workdir: str | Path, inits: list[int], name: str,
     (workdir / src).write_text(lut_design(inits), encoding="utf-8")
     script = hqfpga.flow_script(
         part, [src], "t", verilog_out=f"{name}_phy.v",
-        bitfile=f"{name}.bit", loc=loc)
+        bitfile=f"{name}.bit", loc=loc, xpn_out=f"{name}.xpn")
     proc = hqfpga.run_script(script, str(workdir), log=f"{name}.log", timeout=timeout)
     bit_path = workdir / f"{name}.bit"
     bs = Bitstream.read(str(bit_path)) if bit_path.is_file() else None

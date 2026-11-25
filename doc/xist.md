@@ -18,7 +18,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/device.py` | **verified**: `dv_list.xml`, `'udev.report`, `'udev.pkg.report` |
 | `xist/hqfpga.py` | **verified**: batch flow runner |
 | `xist/probe.py` | **verified**: locked-slice LUT probes + placed-netlist parser |
-| `xist/lutmap.py` | **verified** per tile; the LUT minterm permutation is tile-position dependent (see below) |
+| `xist/lutmap.py` | **superseded**: the physical SRAM layout is a tile-type constant; the observed per-tile variation is vendor LUT pin swapping (see "LUT INIT" below) |
 | `xist/xpn.py` | **verified**: XPN signal/route parser |
 | `xist/chipdb.py` | **skeleton**: 2040 tiles, 16 bels/PLC, 196 package pads, observed routing; emits `.bba` |
 | `xist/bbalint.py` | **verified**: dangling label / push-pop checker |
@@ -452,8 +452,8 @@ the tile are driven.  Validated read-only on the routed corpus:
 ```
 
 **LUT INIT**: the BFD encodes the truth-table fuses as
-``memory(SLICE_D, bank, minterm)``, which gives both the position and the
-minterm index directly - no probe campaign needed:
+``memory(SLICE_D, bank, addr)``, which gives both the position and the SRAM
+word address directly - no probe campaign needed:
 
 ```
 XPFU_SR/XXPFU_SLICE_SR_3/XXLOGICMUX16_0/XXLUT0/Q0 = (comp(SLICE_D) && !memory(SLICE_D,0,0))
@@ -469,6 +469,65 @@ writes the complemented fuses.  Validated on the routed corpus:
 ```
 698 slice instances, 21664 / 21664 LUT INIT bits (100.000%)
 ```
+
+#### The per-tile LUT "permutation" was a probe artefact
+
+An earlier note here said the LUT minterm permutation depends on tile position
+and would need a per-tile campaign.  That was wrong, and the probe framework
+itself was the reason.
+
+`run_lut_probe` synthesised `xsLUT4 u0 (.A(a),.B(b),.C(c),.D(d),.Z(o0))` with
+`defparam u0.init = 16'hHERE` and then assumed the vendor kept that A..D
+correspondence when it mapped the LUT into the PLC slice.  It does not
+guarantee that.  Reading the XPN back from the same probe shows the vendor
+re-encodes the function with a different input association per tile:
+
+```
+R10C10D  K0 = (B*(A*(D*C)))
+R20C19D  K0 = (A*(D*(B*C)))
+R20C10D  K0 = (B*(C*(D*A)))
+R30C20D  K0 = (D*(A*(C*B)))
+```
+
+All four are `A·B·C·D`, i.e. the same logic, but the letter that the vendor
+prints for each physical input differs.  The probe compared physical fuses
+against a logical truth table without accounting for that relabelling, so the
+"permutation" it measured was the vendor's LUT input re-encoding, not the SRAM
+layout.
+
+The SRAM layout itself is a **tile-type constant**.  The BFD gives it directly:
+
+```
+memory(SLICE_D, 0, addr) -> bit (29*(row-1) + base_row - (addr & 1),
+                                  col_base - base_col - (addr >> 1))
+```
+
+with `base_row = 28` and `base_col = 37` for slice D bank 0, identical for every
+PLC on the chip.  Using that identity map together with the function parsed from
+the tile's own XPN program reproduces the vendor bitstream exactly:
+
+```
+R10C10D  (B*(A*(D*C)))   init 0x8000   16/16 bits
+R20C19D  (A*(D*(B*C)))   init 0x8000   16/16 bits
+R20C10D  (B*(C*(D*A)))   init 0x8000   16/16 bits
+R10C30D  (B*(A*(D*C)))   init 0x8000   16/16 bits
+R30C20D  (D*(A*(C*B)))   init 0x8000   16/16 bits
+```
+
+and on the routed corpus (698 slice instances, functions taken from the XPN):
+
+```
+LUT INIT bits 21664 / 21664 (100.000%)
+```
+
+So no per-tile LUT calibration is needed at all.  What a writer needs is the
+slice function as the vendor expresses it, which the XPN already provides as
+`K0::H0=...` / `K1::H1=...`.  `xist/lutinit.py` evaluates those expressions and
+writes the BFD identity map.
+
+The probe framework is still useful for anything the BFD does not describe, but
+its results must be read together with the probe's own XPN, never against an
+assumed pin order.  `run_lut_probe` now keeps that XPN (`{name}.xpn`).
 
 ### .bit assembly
 

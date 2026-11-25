@@ -48,7 +48,8 @@ def run_script(script: str, workdir: str, log: str = "xist.log",
 def flow_script(part: str, sources: list[str], top: str,
                 verilog_out: str | None = None, bitfile: str | None = None,
                 loc: str | None = None, extra_tcl: str = "",
-                analysis: str = "design.analyze") -> str:
+                analysis: str = "design.analyze",
+                xpn_out: str | None = None) -> str:
     """Build the standard implementation script.
 
     ``part`` must be the full part name (Die-SpeedPackage-Condition), e.g.
@@ -70,6 +71,8 @@ def flow_script(part: str, sources: list[str], top: str,
     lines += ["design.place -seed 1", "design.route"]
     if verilog_out:
         lines.append(f"nl.write {verilog_out} -phy -loc")
+    if xpn_out:
+        lines.append(f"xpn.write {xpn_out}")
     if bitfile:
         lines.append(f"{bitgen} {bitfile}")
     if extra_tcl:
