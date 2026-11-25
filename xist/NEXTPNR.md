@@ -80,10 +80,13 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   `-12k` corners.  Their bits live in the neighbouring 59-column block and
   their equations include negated arcs + wire guards
   (`!arcval(...) && wire(...)`).  The parser/export and `program_routing` now
-  support that form, but the PIO mapping itself is not settled: the 59-column
-  edge tile type varies by row, and the INDEL fuses move with it.  A
-  per-row/per-slot probe campaign is required; enabling the current guess
-  would write wrong bits.
+  support that form, but the PIO mapping itself is not settled.  A 87-site
+  probe campaign (see doc/xist.md) found that the input-mode bit pattern is
+  stable per (side, slot) across rows and reproduces 1283/1289 corpus bits
+  (99.53%).  Most of those bits are PIO configuration, not BFD routing arcs;
+  output-mode patterns are unstable because the probe diff still contains the
+  output routing.  Measurements are in `testdata/SL2-12E_pio_probe.json`;
+  PIC fusion stays off until the PIO config model exists.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch

@@ -410,6 +410,35 @@ tile varies by row (`PIC_L5`, `PIC_L0_DUMMY`, `LLC5PIC`, `CIB_EBR0_END0...`)
 with different INDEL rows/columns.  A per-row, per-slot probe campaign is
 needed before these fuses can be trusted in a writer.
 
+### PIO probe campaign (edge pads)
+
+87 controlled probes were run (left/right edge, slots A-D, every row that has a
+package pad).  Each probe compares an input pad at the site (`o=~a`) with an
+output pad at the same site (`a=~b, o=~b`), same slice, and diffs the 29x59 pad
+tile block.
+
+Result: the input-mode bit pattern is identical for every probed row of a given
+(side, slot).  Example (row offset within the tile, absolute bit column):
+
+```
+L A: (2,2361) (3,2363) (5,2375) (9,2375) (15,2375) (18,2375)   11/11 rows
+L B: (2,2364) (3,2361) (5,2374) (9,2374) (15,2374) (18,2374)   12/12
+R A: (0,58)   (5,2)   (9,2)   (15,2)   (18,2)                  12/12
+```
+
+Checked against the routed corpus, the input patterns reproduce 1283/1289 bits
+(99.53%; the 6 differences are three designs with a different IO program).
+
+Output-mode patterns are not stable: the A/C diff also contains the routing to
+the output pad, which moves with placement.  Of the measured bits, only the
+INDEL appears in the BFD routing equations (`!arcval(PIO,JDI) && wire(JDI)`);
+the rest are PIO configuration (direction, IO standard, pull), which the BFD
+routing export does not model.
+
+The measurements are in `testdata/SL2-12E_pio_probe.json`.  PIC fusion stays
+disabled until the PIO configuration model exists and the output mode is probed
+with a controlled tristate/OE design.
+
 DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
 mode: their data input is the slice output mux (`OFX -> DI`), so they require
 LUT/DFF packing that the bring-up uarch does not do yet.  `--bfd` (additive)

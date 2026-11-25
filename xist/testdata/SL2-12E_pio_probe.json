@@ -1,0 +1,435 @@
+{
+ "device": "SL2-12E-8F256C",
+ "method": "vendor A/B probe: A = input pad at the site (o=~a), C = output pad at the same site (a=~b, o=~b); same slice R20C19D. Diff of the two bitstreams inside the pad's 29x59 tile block.",
+ "rows": "bit positions are (row offset within the tile's 29 rows, absolute bit column)",
+ "input_patterns": {
+  "L": {
+   "C": {
+    "bits": [
+     [
+      2,
+      2353
+     ],
+     [
+      3,
+      2355
+     ],
+     [
+      5,
+      2373
+     ],
+     [
+      9,
+      2373
+     ],
+     [
+      15,
+      2373
+     ],
+     [
+      18,
+      2373
+     ]
+    ],
+    "sites": 10,
+    "agree": 10
+   },
+   "B": {
+    "bits": [
+     [
+      2,
+      2364
+     ],
+     [
+      3,
+      2361
+     ],
+     [
+      5,
+      2374
+     ],
+     [
+      9,
+      2374
+     ],
+     [
+      15,
+      2374
+     ],
+     [
+      18,
+      2374
+     ]
+    ],
+    "sites": 12,
+    "agree": 12
+   },
+   "A": {
+    "bits": [
+     [
+      2,
+      2361
+     ],
+     [
+      3,
+      2363
+     ],
+     [
+      5,
+      2375
+     ],
+     [
+      9,
+      2375
+     ],
+     [
+      15,
+      2375
+     ],
+     [
+      18,
+      2375
+     ]
+    ],
+    "sites": 11,
+    "agree": 11
+   },
+   "D": {
+    "bits": [
+     [
+      2,
+      2356
+     ],
+     [
+      3,
+      2353
+     ],
+     [
+      5,
+      2372
+     ],
+     [
+      9,
+      2372
+     ],
+     [
+      15,
+      2372
+     ],
+     [
+      18,
+      2372
+     ]
+    ],
+    "sites": 8,
+    "agree": 8
+   }
+  },
+  "R": {
+   "A": {
+    "bits": [
+     [
+      0,
+      58
+     ],
+     [
+      5,
+      2
+     ],
+     [
+      9,
+      2
+     ],
+     [
+      15,
+      2
+     ],
+     [
+      18,
+      2
+     ]
+    ],
+    "sites": 12,
+    "agree": 12
+   },
+   "B": {
+    "bits": [
+     [
+      0,
+      57
+     ],
+     [
+      5,
+      3
+     ],
+     [
+      9,
+      3
+     ],
+     [
+      15,
+      3
+     ],
+     [
+      18,
+      3
+     ]
+    ],
+    "sites": 13,
+    "agree": 13
+   },
+   "C": {
+    "bits": [
+     [
+      0,
+      50
+     ],
+     [
+      1,
+      51
+     ],
+     [
+      5,
+      4
+     ],
+     [
+      9,
+      4
+     ],
+     [
+      15,
+      4
+     ],
+     [
+      18,
+      4
+     ]
+    ],
+    "sites": 11,
+    "agree": 11
+   },
+   "D": {
+    "bits": [
+     [
+      0,
+      49
+     ],
+     [
+      0,
+      52
+     ],
+     [
+      5,
+      5
+     ],
+     [
+      9,
+      5
+     ],
+     [
+      15,
+      5
+     ],
+     [
+      18,
+      5
+     ]
+    ],
+    "sites": 10,
+    "agree": 10
+   }
+  }
+ },
+ "output_patterns": {
+  "L": {
+   "C": {
+    "bits": [
+     [
+      11,
+      2373
+     ],
+     [
+      16,
+      2369
+     ],
+     [
+      22,
+      2337
+     ],
+     [
+      23,
+      2340
+     ]
+    ],
+    "sites": 10,
+    "agree": 2
+   },
+   "B": {
+    "bits": [
+     [
+      9,
+      2366
+     ],
+     [
+      11,
+      2374
+     ],
+     [
+      20,
+      2352
+     ],
+     [
+      22,
+      2355
+     ]
+    ],
+    "sites": 12,
+    "agree": 2
+   },
+   "A": {
+    "bits": [
+     [
+      2,
+      2368
+     ],
+     [
+      11,
+      2375
+     ],
+     [
+      21,
+      2354
+     ],
+     [
+      22,
+      2353
+     ]
+    ],
+    "sites": 11,
+    "agree": 2
+   },
+   "D": {
+    "bits": [
+     [
+      11,
+      2372
+     ],
+     [
+      17,
+      2361
+     ],
+     [
+      17,
+      2363
+     ],
+     [
+      21,
+      2340
+     ],
+     [
+      23,
+      2337
+     ],
+     [
+      23,
+      2366
+     ]
+    ],
+    "sites": 8,
+    "agree": 1
+   }
+  },
+  "R": {
+   "A": {
+    "bits": [
+     [
+      2,
+      9
+     ],
+     [
+      11,
+      2
+     ],
+     [
+      20,
+      51
+     ],
+     [
+      23,
+      49
+     ]
+    ],
+    "sites": 12,
+    "agree": 3
+   },
+   "B": {
+    "bits": [
+     [
+      9,
+      11
+     ],
+     [
+      11,
+      3
+     ],
+     [
+      21,
+      48
+     ],
+     [
+      23,
+      52
+     ]
+    ],
+    "sites": 13,
+    "agree": 3
+   },
+   "C": {
+    "bits": [
+     [
+      11,
+      4
+     ],
+     [
+      16,
+      8
+     ],
+     [
+      21,
+      33
+     ],
+     [
+      23,
+      37
+     ]
+    ],
+    "sites": 11,
+    "agree": 3
+   },
+   "D": {
+    "bits": [
+     [
+      11,
+      5
+     ],
+     [
+      20,
+      36
+     ],
+     [
+      23,
+      11
+     ],
+     [
+      23,
+      35
+     ]
+    ],
+    "sites": 10,
+    "agree": 3
+   }
+  }
+ },
+ "note": "Input-mode patterns are identical for every probed row (11-13 rows per side/slot).  Output-mode patterns are not stable: the A/C diff also contains routing to the output pad, which varies by placement.  The input patterns include the PIO direction/config bits; only one of them (the INDEL) appears in the BFD routing equations.",
+ "validation": "input patterns on the routed corpus: 1283/1289 bits (99.53%)"
+}
