@@ -142,7 +142,8 @@ def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
         for w in (f"PAD_{slot}", f"JDI{slot}", f"JPADDI{slot}_PIO",
                   f"JPADDO{slot}", f"PADDO{slot}_PIO", f"OE_{slot}",
                   f"IOLDO{slot}", f"JOPOS{slot}", f"JIN{slot}",
-                  f"JCLK{slot}", f"JCE{slot}", f"JLSR{slot}"):
+                  f"JCLK{slot}", f"JCE{slot}", f"JLSR{slot}",
+                  f"JIPA{slot}", f"JONEG{slot}"):
             tt.create_wire(w)
         b = tt.create_bel(f"PIO_{slot}", "PIO", s)
         tt.add_bel_pin(b, "PAD", f"PAD_{slot}", PinType.INOUT)
@@ -163,6 +164,26 @@ def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
         tt.add_bel_pin(reg, "R", f"JLSR{slot}", PinType.INPUT)
         tt.add_bel_pin(reg, "S", f"JLSR{slot}", PinType.INPUT)
         tt.add_bel_pin(reg, "Q", f"IOLDO{slot}", PinType.OUTPUT)
+        # IOLOGIC input register / DDR input.  D comes from the pad (JDI<slot>
+        # is the pad data net), the two outputs go to the fabric through the
+        # CIB's A/F nets.  The vendor's xsIDDRX1 gives Q0 = the positive-edge
+        # sample and Q1 = the negative-edge sample, which map onto the pair of
+        # nets the CIB exposes, so one bel serves both IRQ and IDDR.
+        inreg = tt.create_bel(f"IOLI{slot}", "IOLOGICI", 8 + s)
+        tt.add_bel_pin(inreg, "D", f"JDI{slot}", PinType.INPUT)
+        tt.add_bel_pin(inreg, "CLK", f"JCLK{slot}", PinType.INPUT)
+        tt.add_bel_pin(inreg, "CE", f"JCE{slot}", PinType.INPUT)
+        tt.add_bel_pin(inreg, "R", f"JLSR{slot}", PinType.INPUT)
+        tt.add_bel_pin(inreg, "S", f"JLSR{slot}", PinType.INPUT)
+        tt.add_bel_pin(inreg, "Q0", f"JIN{slot}", PinType.OUTPUT)
+        tt.add_bel_pin(inreg, "Q1", f"JIPA{slot}", PinType.OUTPUT)
+        # DDR output (xsODDR): two data inputs sampled on opposite edges.
+        ddr = tt.create_bel(f"IOLOD{slot}", "ODDR", 12 + s)
+        tt.add_bel_pin(ddr, "D0", f"JOPOS{slot}", PinType.INPUT)
+        tt.add_bel_pin(ddr, "D1", f"JONEG{slot}", PinType.INPUT)
+        tt.add_bel_pin(ddr, "CLK", f"JCLK{slot}", PinType.INPUT)
+        tt.add_bel_pin(ddr, "R", f"JLSR{slot}", PinType.INPUT)
+        tt.add_bel_pin(ddr, "Q", f"IOLDO{slot}", PinType.OUTPUT)
 
 
 def _add_hard_tile_type(chip: Chip, name: str) -> None:
@@ -418,7 +439,8 @@ def _wire_pad_iologic(chip: Chip, report: DeviceReport,
     for i, slot in enumerate("ABCD"):
         pairs += [(f"JOPOS{slot}", f"A{i}"), (f"JIN{slot}", f"F{i}"),
                   (f"JCLK{slot}", f"CLK{i}"), (f"JLSR{slot}", f"LSR{i}"),
-                  (f"JCE{slot}", f"CE{i}")]
+                  (f"JCE{slot}", f"CE{i}"), (f"JIPA{slot}", f"F{i}"),
+                  (f"JONEG{slot}", f"A{i}")]
     for (r, c), (r2, c2) in adj.items():
         if not (0 <= r2 < rows and 0 <= c2 < cols):
             continue

@@ -376,6 +376,40 @@ def test_output_register_packs_into_iologic(tmp_path):
     assert checked > 0
 
 
+@pytest.mark.parametrize("name,profile,prog", [
+    ("SL2-12E_ddr_oddr", "PIC_L5", "IOLOGIC_ODDR"),
+    ("SL2-12E_ddr_iddr", "PIC_L5", "IOLOGIC_IDDR"),
+])
+def test_ddr_pad_config_matches_vendor(name, profile, prog):
+    """ODDR / IDDR at a pad: every edge config fuse matches the vendor .bit."""
+    from xist import piogen
+    from xist.apply import _config, profile_config_equations, pad_group
+    from xist.bfdmap import load_calibration
+    from xist.pioconfig import bits_from_equations
+    from xist.xpn import Comp
+
+    xpn = TESTDATA / f"{name}.xpn"
+    bit = TESTDATA / f"{name}_vendor.bit"
+    if not bit.exists():
+        pytest.skip("vendor bitstream not available")
+    data, eqs = _config("")
+    profiles = json.loads((TESTDATA / "SL2-12E_bfd_profiles.json").read_text())
+    cal = load_calibration()
+    pos = 2                                   # the vendors placed both at PL2A
+    comps = [Comp(c.name, c.site, getattr(piogen, prog))
+             if c.site.startswith("IOL_") else c
+             for c in parse_comps(xpn).values()
+             if pad_group(c.site) == ("L", pos)]
+    assert any(c.site.startswith("IOL_") for c in comps)
+    bits = bits_from_equations(
+        list(eqs["L"]) + profile_config_equations(profiles["profiles"][profile]),
+        comps, pos, 2375, None)
+    vendor = Bitstream.read(str(bit))
+    diff = [(br, bc) for br, bc, val in bits
+            if bc >= 0 and (vendor.rows[br][bc] == "1") != val]
+    assert diff == [], f"{len(diff)} mismatching PIO/IOLOGIC bits {diff[:6]}"
+
+
 def test_counter_control_fuses_set(counter_replay_bit):
     """Reset/CE produce the expected slice and routing fuses."""
     ours = Bitstream.read(str(counter_replay_bit))

@@ -729,9 +729,11 @@ Still open:
 * The ``PIC`` tiles in columns 0/50 have no BFD routing profile, so nets that
   pass through an edge tile (left/right pads) keep the template routing value.
   Pad *configuration* is written; edge routing fuses are not.
-* IOLOGIC *output* registers are modelled end to end (bel, packing, program,
-  fuses; bit-exact against a vendor oracle).  The IOLOGIC input register and
-  DDR modes are not.
+* IOLOGIC output registers, input registers and DDR (ODDR/ODDR2/IDDRX1) all
+  have bels, packing and program synthesis; their pad configuration is
+  bit-exact against vendor oracles.  Not modelled: the ODDRX4/ODDRX7 and
+  IDDRX2/IDDRX4/IDDRDQS variants, and an IOLOGIC cell that spans two pad
+  groups (see above).
 
 ### Bitstream writer from routed JSON
 
@@ -884,11 +886,67 @@ our flow places the DFF on X0Y2/IOLOA and routes D -> JOPOSA
 OUTFF_0 / OUTCE_EN_0 / OUTCLK_EN_0       1 / 1 / 1, matching the equations
 ```
 
-What is **not** modelled: the IOLOGIC *input* register and DDR modes.  The
-vendor RTL analyzer rejects ``ODDR``/``IDDR``/``ODDRX1`` instances ("Module ...
-is not found"), so no DDR oracle can be produced from RTL; the vendor only
-creates IOLOGIC registers as an optimisation, which the output-register packer
-now reproduces.
+### IOLOGIC input register and DDR
+
+The vendor's *simulation* library, shipped in
+`~/Downloads/hqfpga/common/sim/verilog/XIST/sealion/`, defines the primitives the
+RTL analyzer actually accepts.  They are named with the ``xs`` prefix
+(``xsODDR``, ``xsODDRX2``, ``xsODDRX4``, ``xsIDDRX1``, ``xsIDDRX2``,
+``xsIDDRDQS``, ``xsIODLY``), which is why the Gowin-style names ``ODDR``/``IDDR``
+were rejected.  Reading them gives the interface and the sampling behaviour:
+
+```
+xsODDR   (D0, D1, RST, SCLK, Q)                  + parameter GSR
+xsODDRX2 (D0..D3, RST, ECLK, SCLK, Q)            SDR->DDR x2
+xsIDDRX1 (D, SCLK, RST, Q0, Q1)                  Q0 = posedge, Q1 = negedge
+xsIDDRX2 (D, ECLK, SCLK, RST, ALIGNWD, Q0..Q3)
+xsIODLY  (A, Z)                                  DEL_MODE / DEL_VALUE (no-op)
+```
+
+With the ``xs`` names the vendor flow now runs DDR designs end to end, so
+these became oracles (`testdata/SL2-12E_ddr_oddr`, `_ddr_iddr`, `_ddr_oddr2`,
+each with its vendor ``.bit``).  Their XPN exports pin down how the cell is
+wired:
+
+```
+OREG    clk -> CLK,  d0 -> OPOS, d1 -> ONEG,  IOLDO -> pad
+IREG    pad -> DI,   IP -> q0, IN -> q1
+ODDR2   clk -> CLK,  eclk -> ECLK, d0..d3 -> TXD0..TXD3, IOLDO -> pad
+```
+
+The BFD agrees: the IOLOGIC ``MODE`` field has exactly three values
+(`IREG_OREG`, `IDDR_ODDR`, `MIDDR_MODDR`), and the pad fuses select between
+``TRIMUX:IOLTO`` (data into the IOLOGIC) and ``DATAMUX:IOLDO`` (data out of it).
+
+Modelled now:
+
+* **bels.**  Each pad's edge tile type gets `IOLO<s>` (DFF, the output/data
+  register), `IOLI<s>` (`IOLOGICI`: D from the pad, Q0/Q1 to the CIB) and
+  `IOLOD<s>` (`ODDR`: D0/D1 from the fabric, Q to the pad), plus `JIPA`/`JONEG`
+  wires, all joined to the adjacent CIB by a node.
+* **packing.**  `pack_pad_iologic()` moves an IDDR cell, or a DFF whose D is
+  driven by a pad, into `IOLI`; an ODDR/ODDR2 into `IOLOD`.  `PAD_IREG` /
+  `PAD_DDR` mark them, and `isBelLocationValid()` keeps each bel family
+  consistent.
+* **programs and fuses.**  `piogen` synthesises the vendor program text
+  (`IDDR:::GSR=ENABLED IP:IP`, `ODDR:::GSR=ENABLED ONEGMUX:ONEG`,
+  `ODDR2:::... TXD0MUX..TXD3MUX`), so the `MODE`/`IN`/`IP`/`OPOSMUX`/
+  `ONEGMUX`/`TXD*MUX` fuses are written.
+
+Validation against the three DDR oracles (all pure-config fuses of the edge
+profile, PIO + IOLOGIC + DDR):
+
+```
+SL2-12E_ddr_oddr    (xsODDR,  PL2A)   315 / 315 bits
+SL2-12E_ddr_iddr    (xsIDDRX1, PL2A)  315 / 315 bits
+SL2-12E_ddr_oddr2   (xsODDRX2, PT7A)  all 193 config fuses of the pad
+```
+
+The remaining `ODDRX2` gap is the top edge's *second* pad group: the cell spans
+`PT7` and `PT10`, and the writer currently evaluates each pad position with only
+its own group's comps, so the `PT10` pads keep the template value.  `SL2-12E_ddr_oddr2`
+reproduces 246 of those 288 bit positions because of it; the same limit applies
+to any design that puts one IOLOGIC across two pad groups.
 
 ### PIO configuration model
 
