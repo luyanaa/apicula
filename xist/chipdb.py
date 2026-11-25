@@ -170,8 +170,11 @@ def _context_name(tok: str, r: int, c: int) -> str:
             return "CTEST_L"
         if c == 49:
             return "CTEST_R"
-        if r in (1, 38):
+        if r == 1:
             return "CTEST_CFG"
+        if r == 38:
+            # row 38 sits on the bottom CIB ring and matches the EBR profile
+            return "CTEST_BOT"
         return "CTEST_EBR"
     if tok == "EBR":
         if c == 1:
@@ -205,8 +208,13 @@ def default_bfd_profiles() -> dict[str, tuple[Path, str | None]]:
         "PLC": (plc, None),
         "CTEST_CFG": (prof, "CIB_CFG"),
         "CTEST_EBR": (prof, "CIB_EBR"),
+        "CTEST_BOT": (prof, "CIB_EBR"),
         "EBR_CIB": (prof, "CIB_EBR"),
         "DSP_CIB": (prof, "CIB_DSP"),
+        # top/bottom pad blocks: the 6-row PIC_T5/PIC_B5 profiles also carry
+        # routing muxes (their fuses sit at row_base 1108 / 1102).
+        "PIC_top": (prof, "PIC_T5"),
+        "PIC_bot": (prof, "PIC_B5"),
         # 59-column left / right edge blocks (columns 1 and 49)
         "CTEST_L": (prof, "CIB_EBR0_END0_NO_CLKDLY30"),
         "EBR_L": (prof, "CIB_EBR0_END0_NO_CLKDLY30"),

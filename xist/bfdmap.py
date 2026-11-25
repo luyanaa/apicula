@@ -135,10 +135,12 @@ def export(tile: BfdTile, cal: Calibration, out: Path) -> dict:
         "arcs": len(arcs),
         "logical_arcs": len(logical),
         "conditional_arcs": sorted(logical - set(arcs)),
+        "aliases": dict(sorted(tile.aliases.items())),
         "routing_equations": sum(1 for e in tile.equations.values()
                                  if "arcval" in e and "config(" not in e
                                  and "property(" not in e),
         "fuses": fuses,
+        "fuse_exprs": {n: tile.equations[n] for n in fuses},
         "arc_fuses": arcs,
         "special_fuses": tile.special_fuses(),
         # LUT INIT: memory(SLICE_x, bank, minterm) fuses, natural order
@@ -167,7 +169,9 @@ def export_profiles(tiles: dict[str, BfdTile], cal: Calibration,
     """
     groups: dict[str, list[str]] = {}
     for name, t in sorted(tiles.items()):
-        if t.rows != TILE_ROWS or t.cols < min_cols:
+        # 29-row CIB fabric plus the 6-row top/bottom pad blocks, which also
+        # carry routing muxes
+        if t.rows not in (TILE_ROWS, 6) or t.cols < min_cols:
             continue
         if not t.arc_set():
             continue

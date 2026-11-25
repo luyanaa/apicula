@@ -78,7 +78,8 @@ def test_bfd_fuse_positions(chip_bfd):
 def test_context_names():
     assert _context_name("PLC", 10, 10) == "PLC"
     assert _context_name("CTEST", 1, 10) == "CTEST_CFG"
-    assert _context_name("CTEST", 38, 10) == "CTEST_CFG"
+    # row 38 sits on the bottom CIB ring and matches the EBR profile
+    assert _context_name("CTEST", 38, 10) == "CTEST_BOT"
     assert _context_name("CTEST", 2, 1) == "CTEST_L"
     assert _context_name("CTEST", 2, 49) == "CTEST_R"
     assert _context_name("CTEST", 8, 10) == "CTEST_EBR"

@@ -543,19 +543,39 @@ the routing muxes and LUT INIT, writes the slice configuration, applies the PIO
 configuration, and finally recomputes the checksum.
 
 Running it with a vendor bitstream as both template and source is a strong
-check: every bit it writes must already be correct.  On 60 routed designs the
-difference from the vendor bitstream is:
+check: every bit it writes must already be correct.  On the 18-design validation
+corpus:
 
 ```
-total residual 1421 of 160380000 bits = 0.000886%
-per design: best 16, worst 64, mean 23.7
+designs 18, checksum-valid 18/18
+total residual 17 of 48114000 bits = 0.000035%
 ```
 
-The residual is concentrated in three places, all of them still synthetic:
-the 59-column spine tiles (`CENTER*_12K`, whose 2-column bit mapping is not
-calibrated), `CTEST_CFG`/`CTEST_EBR` (a row-1/38 profile subset), and a handful
-of same-track long-wire aliases.  Routing, slice configuration, LUT INIT, PIO
-configuration and the checksum are bit-exact.
+Three fixes closed most of the gap, all of the same kind - a fuse belongs to
+the tile that owns its *destination* wire:
+
+* `used_arcs()` records both arc orientations.  Most arcs read
+  `destination.source`, but the edge tiles write some the other way round
+  (`R1C10_JA1 -> R1C10_H02W0502` where the equation is `arcval(H02W0502, A1)`).
+* arcs whose other end is in a neighbouring tile count too
+  (`R1C10_JA2 -> R0C10_JPADDOC`), because their mux fuse lives in this tile.
+* every profile now carries its own `aliases` table, so the XPN's `JA3` is
+  translated where the equations say `A3`.
+
+The routing path also had to stop driving fuses that are not positive muxes:
+`config()`/`property()` rules, `FALSE` placeholders and the inverted-guarded
+`!arcval(a,b) && wire(w)` form (the PIO input-delay `INDEL`) are left to the PIO
+path.
+
+Row 38 turned out to sit on the bottom CIB ring and matches `CIB_EBR`, not
+`CIB_CFG` (measured: 0 mismatches vs 4).  It is a separate context
+(`CTEST_BOT`), as is row 1 (`CTEST_CFG`).
+
+What is still missing is confined to the pad blocks: the remaining 17 bits are
+PIO configuration fuses (`PU_B`, `PWRGRD_E_B`, `PG3_C`) on the top/bottom pad
+tiles whose values the current PIO model does not reproduce - pull/bank
+dependent rules rather than routing.  Routing, slice configuration, LUT INIT and
+the checksum are bit-exact; PLC tiles are fully exact.
 
 ### PIO configuration model
 

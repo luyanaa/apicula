@@ -29,6 +29,24 @@ HERE = Path(__file__).resolve().parent
 TESTDATA = HERE / "testdata"
 
 
+def _is_config_fuse(profile: dict, fuse: str) -> bool:
+    """True when the fuse is not a plain positive routing mux.
+
+    Covers PIO/IOLOGIC ``config()``/``property()`` rules, ``FALSE`` placeholders
+    and the inverted-guarded form ``!arcval(a,b) && wire(w)`` (e.g. the PIO
+    input-delay INDEL).  Those are written by the PIO path or left alone; the
+    routing path must not drive them with a positive-arc value.
+    """
+    expr = (profile.get("fuse_exprs") or {}).get(fuse, "")
+    if "config(" in expr or "property(" in expr:
+        return True
+    if not expr.strip() or expr.strip().upper() == "FALSE":
+        return True
+    if "!arcval" in expr or "wire(" in expr:
+        return True
+    return False
+
+
 def _fuse_arcs(profile: dict) -> dict[str, set[tuple[str, str]]]:
     out: dict[str, set[tuple[str, str]]] = {}
     for arc, names in profile["arc_fuses"].items():
@@ -41,9 +59,13 @@ def _fuse_arcs(profile: dict) -> dict[str, set[tuple[str, str]]]:
 def program_plc(bs: Bitstream, xpn_path, profile: dict, aliases: dict,
                 cal, tile_row: int, tile_col: int) -> int:
     used = used_arcs(xpn_path, tile_row, tile_col)
-    used = {(aliases.get(a, a), aliases.get(b, b)) for a, b in used}
+    amap = dict(aliases or {})
+    amap.update(profile.get("aliases") or {})
+    used = {(amap.get(a, a), amap.get(b, b)) for a, b in used}
     n = 0
     for fuse, arcs in _fuse_arcs(profile).items():
+        if _is_config_fuse(profile, fuse):
+            continue
         val = not arcs.isdisjoint(used)
         for (rr, rc) in profile["fuses"][fuse]:
             br, bc = cal.bit(tile_row, tile_col, rr, rc)
@@ -98,6 +120,26 @@ def program_luts(bs: Bitstream, xpn_path, lut_init: dict, cal,
                 if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
                     _set(bs, br, bc, not ((init >> j) & 1))
                     n += 1
+    return n
+
+
+def program_plc_rows(bs: Bitstream, xpn_path, profile: dict, cal,
+                     tile_row: int, tile_col: int, base_row: int) -> int:
+    """Same as program_plc() but for the 6-row top/bottom blocks."""
+    used = used_arcs(xpn_path, tile_row, tile_col)
+    amap = dict(profile.get("aliases") or {})
+    used = {(amap.get(a, a), amap.get(b, b)) for a, b in used}
+    n = 0
+    for fuse, arcs in _fuse_arcs(profile).items():
+        if _is_config_fuse(profile, fuse):
+            continue
+        val = not arcs.isdisjoint(used)
+        for (rr, rc) in profile["fuses"][fuse]:
+            br = base_row + rr
+            bc = cal.column_base[tile_col] - rc
+            if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+                _set(bs, br, bc, val)
+                n += 1
     return n
 
 
@@ -171,6 +213,13 @@ def build(base: str | Path, xpn_path: str | Path, out: str | Path,
     for (row, col) in all_tiles:
         if col in cal.column_base:
             tiles.add((row, col))
+    # top and bottom pad blocks live outside the 29-row pitch
+    edge_tiles = []
+    for row, token in ((0, "PIC_top"), (39, "PIC_bot")):
+        for col, tok in enumerate(rep.tiles[row]):
+            if tok and tok != "." and ctx_profile.get(_context_name(tok, row, col)):
+                edge_tiles.append((row, col))
+
     for (row, col) in tiles:
         if col not in cal.column_base:
             continue
@@ -185,6 +234,19 @@ def build(base: str | Path, xpn_path: str | Path, out: str | Path,
         nr += program_slice(bs, xpn_path, slice_json, cal, row, col)
         nr += program_luts(bs, xpn_path, prof.get("lut_init", {}),
                            cal, row, col)
+
+    for (row, col) in edge_tiles:
+        if col not in cal.column_base:
+            continue
+        token = rep.tiles[row][col]
+        ctx = _context_name(token, row, col)
+        prof = ctx_profile.get(ctx)
+        if prof is None:
+            continue
+        base_row = 1108 if row == 0 else 1102
+        # the pad blocks are their own tile instance; used_arcs must look at the
+        # XPN route endpoints that belong to this column, not the 29-row tile
+        nr += program_plc_rows(bs, xpn_path, prof, cal, row, col, base_row)
     npio = apply_pio(bs, xpn_path) if pio else 0
     bs.update_checksum()
     Path(out).write_text("")  # placeholder; write below

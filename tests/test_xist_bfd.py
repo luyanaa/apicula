@@ -132,11 +132,11 @@ def test_profiles_complete():
     assert {"PLC", "CIB_CFG", "CIB_DSP", "CIB_EBR"} <= set(d["profiles"])
     assert {"PIC_L5", "PIC_R5", "URC1_NO_DTR", "LLC5PIC",
             "LRC5PIC"} <= set(d["profiles"])
-    assert len(d["profiles"]) == 28
+    assert len(d["profiles"]) == 35
     cov = d["coverage"]
-    assert cov["arcs_union"] == 3315
+    assert cov["arcs_union"] == 3343
     assert cov["long_wire_arcs_union"] == 1976
-    assert len(cov["tile_types"]) == 56
+    assert len(cov["tile_types"]) == 69
 
 
 SPECIAL_BFD = """\
@@ -197,7 +197,9 @@ def test_special_fuse_program(tmp_path):
     n = program_routing(bs, xpn2, t, cal, 2, 5)
     assert n == 2                     # F1 plus the special F0
     assert bs.rows[29][100] == "1"
-    assert bs.rows[29][99] == "0"     # F1 = arcval(B,C) unused
+    # F1 = arcval(B,C); the route C<-B is recorded in both orientations, so the
+    # arc counts as used and F1 is programmed
+    assert bs.rows[29][99] == "1"
 
 
 def test_special_profile_install():
@@ -233,8 +235,9 @@ def test_program_routing(tmp_path):
     xpn.write_text(
         'signal "x"\n{\n   (a, p)\n   route\n   {\n'
         "      R2C5_A.R2C5_JB;\n   }\n}\n")
-    assert used_arcs(xpn, 2, 5) == {("A", "JB")}       # no alias map
-    assert used_arcs(xpn, 2, 5, tile) == {("A", "B")}  # alias JB -> B
+    # both orientations are recorded (the edge tiles write arcs either way)
+    assert used_arcs(xpn, 2, 5) == {("A", "JB"), ("JB", "A")}
+    assert used_arcs(xpn, 2, 5, tile) == {("A", "B"), ("B", "A")}
 
     bs = _make_bs()
     n = program_routing(bs, xpn, tile, cal, 2, 5)

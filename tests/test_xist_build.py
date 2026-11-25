@@ -75,6 +75,34 @@ def test_write_slice_luts(tmp_path):
         assert bs.rows[r][c] == ("0" if (init >> j) & 1 else "1")
 
 
+def test_cross_tile_arcs_and_aliases():
+    """Fuses belong to the tile owning the destination, incl. cross-tile arcs."""
+    from xist.program import used_arcs
+    xpn = Path("/tmp/opencode/corpus/R12C24/R12C24_1.xpn")
+    if not xpn.exists():
+        return
+    used = used_arcs(xpn, 1, 10)
+    # the XPN writes R1C10_JA2.R0C10_JPADDOC; both directions are recorded and
+    # the J-alias is kept (profiles carry their own alias table)
+    assert any("JPADDOC" in pair for pair in used)
+
+
+def test_config_fuse_guard():
+    from xist.build import _is_config_fuse
+    prof = {"fuse_exprs": {
+        "a": 'config(PIO_A,PADDI,"PADDI")',
+        "b": 'property(PIO_A,IOBUF.CLAMP,"ON")',
+        "c": "FALSE",
+        "d": "(!arcval(JPADDIA_PIO,JDIA) && wire(JDIA))",
+        "e": "(arcval(A,B) || arcval(C,D))",
+    }}
+    assert _is_config_fuse(prof, "a")
+    assert _is_config_fuse(prof, "b")
+    assert _is_config_fuse(prof, "c")
+    assert _is_config_fuse(prof, "d")
+    assert not _is_config_fuse(prof, "e")
+
+
 def test_fuse_arcs_and_site_refs():
     prof = json.loads(PLC.read_text())
     af = _fuse_arcs(prof)

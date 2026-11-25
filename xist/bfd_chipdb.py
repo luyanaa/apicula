@@ -39,6 +39,11 @@ def pip_fuses(profile: dict) -> dict[str, list[dict]]:
     return out
 
 
+def alias_map(profile: dict) -> dict[str, str]:
+    """BFD node aliases for a profile (XPN J-names -> canonical names)."""
+    return {k: v for k, v in (profile.get("aliases") or {}).items()}
+
+
 def special_pip_fuses(profile: dict) -> list[dict]:
     """Inverted/guarded fuses, attached to the data-direction pip (b -> a)."""
     out = []

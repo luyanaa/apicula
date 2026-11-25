@@ -75,37 +75,36 @@ def program_relative(bs: Bitstream, pips: set[tuple[str, str]],
 
 def used_arcs(path: str | Path, tile_row: int, tile_col: int,
               tile=None) -> set[tuple[str, str]]:
-    """Tile-local routing arcs from an XPN, oriented as in the BFD.
+    """Routing arcs (source, destination) that are active in one tile.
 
     The BFD equation is ``fuse = arcval(source, destination)``.  The XPN route
     line is ``destination.source``; ``xist.xpn`` stores it as ``(source,
     destination)``, so the BFD arc for a pip is ``(dst_local, src_local)``.
 
-    XPN wires may use the BFD node aliases (``R26C1_JA2`` for the canonical
-    ``A2``), so pass *tile* to translate them through ``tile.aliases``.
+    Two XPN conventions have to be reconciled with the BFD:
+
+    * **aliases** - the XPN says ``R1C10_JA2`` where the equations say ``A2``,
+      so both ends are translated through ``tile.aliases``.
+    * **orientation** - most arcs read destination-first, but the edge tiles
+      write some arcs the other way round (``R1C10_JA1 -> R1C10_H02W0502``
+      where the equation is ``arcval(H02W0502, A1)``).  Both orientations are
+      recorded; a fuse is set when either matches.
+
+    A mux fuse belongs to the tile owning the destination wire, but an arc also
+    counts when the other end is in a neighbouring tile (``R1C10_JA2 ->
+    R0C10_JPADDOC``), because the fuse for that mux lives in this tile.
     """
     prefix = f"R{tile_row}C{tile_col}_"
     alias = tile.aliases if tile is not None else {}
-    used = set()
+    used: set[tuple[str, str]] = set()
     for sig in parse_xpn(path).values():
         for src, dst in sig.route:
-            s_in = src.startswith(prefix)
-            d_in = dst.startswith(prefix)
-            if u_in := (s_in or d_in):
-                pass
-            if not u_in:
+            if not (src.startswith(prefix) or dst.startswith(prefix)):
                 continue
-            # A long-wire hop is written as a cross-tile pair, e.g.
-            # R2C19_H06E0200.R5C19_H06E0206: the local wires of both ends are
-            # active in their own tiles, so keep the endpoint that is local.
-            a = wire_local(dst) if d_in else None
-            b = wire_local(src) if s_in else None
-            if a is not None and b is not None:
-                used.add((alias.get(a, a), alias.get(b, b)))
-            elif a is not None:
-                used.add((alias.get(a, a), a))
-            elif b is not None:
-                used.add((b, alias.get(b, b)))
+            a = alias.get(wire_local(dst), wire_local(dst))
+            b = alias.get(wire_local(src), wire_local(src))
+            used.add((a, b))
+            used.add((b, a))
     return used
 
 
