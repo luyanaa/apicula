@@ -637,10 +637,12 @@ Every PLC tile has the same z layout (``LUT<n>`` at ``4s+{0,1}``, ``DFF<n>`` at
 places both cells together and ``isBelLocationValid()`` accepts the DFF.
 
 A DFF whose ``D`` comes straight from a pad or another register has no LUT in
-its bank (``DI`` is driven only by ``OFX``).  The packer inserts the identity
-LUT the vendor would use - ``INIT = 0xAAAA``, buffer on ``I[0]`` - and clusters
-it like any other pair.  A shift register is thereby one LUT + one DFF per
-stage:
+its bank.  The vendor solves this with ``REG0.SD=0``: the D input is taken from
+the slice's routed ``M`` site input instead of the LUT (see below).  That path
+is not in the chipdb yet, so the packer inserts the identity LUT the vendor
+would use in the other mode - ``INIT = 0xAAAA``, buffer on ``I[0]`` - and
+clusters it like any other pair.  A shift register is thereby one LUT + one
+DFF per stage:
 
 ```
 $ python -m xist.demo_any shift8.v --bfd-replace
@@ -659,6 +661,51 @@ with that input at 1".  Any remaining constant use is rejected:
 ERROR: constant net ... drives ALU/I3; XIST has no VCC source
 ```
 
+### The slice data path: ``SD``, ``DI`` and ``M``
+
+The DFF data input is selected by the per-bank ``REG0/REG1.SD`` field, not by a
+routing fuse:
+
+* ``SD=1`` - ``D`` is the slice LUT output.  The ``F -> DI`` connection is a
+  hardwired slice path, which is why the chipdb's synthetic ``F -> DI`` pip is
+  correct and the vendor leaves the ``OFX0 -> DI0`` fuses at 0.
+* ``SD=0`` - ``D`` is the routed ``M`` site input (``M0MUX:M0`` in the program).
+  The vendor uses this for shift registers and for registers fed straight from a
+  pad, so no LUT is needed at all.
+
+Measured against a vendor run of a plain shift register
+(`testdata/SL2-12E_dff_route.xpn`), whose slice program is
+
+```
+MODE:LOGIC REG0:::REGSET=RESET,CLKDELAY=DEL0:SD=0 Q0:Q GSR:ENABLED
+CLKMUX:CLK:::0=0,CLK=#SIG CEMUX:1:::1=1,CE=#SIG SRMODE:ASYNC
+LSRONMUX:0 M0MUX:M0 REGMODE:FF
+```
+
+and the corresponding bitstream bits: replaying that XPN reproduces the vendor
+`.bit` with 5 residual bits, all in the bottom pad/CIB rows (bit rows >= 1082);
+the PLC rows (29..1073) are exact.  So the DFF data path itself needs no new
+probe - what was missing was a writer driven by nextpnr rather than by the XPN.
+
+### Slice-program synthesis
+
+`xist/sliceprog.py` turns what a packer knows (used LUT/DFF banks, reset and CE)
+into the vendor-shaped program.  The recipe is measured, not guessed: two extra
+designs were run through the vendor tool (HqFpga 3.1.0 Spring 2026:
+
+```
+dv.setup SEALION SL2-12E-8F256C
+design.analyze shift4.v / reg_xor.v
+design.rtlsyn -top top ; design.map ; design.pack
+design.place -seed 1 ; design.route
+xpn.write out.xpn ; impl.bitgen.xist.sealion out.bit
+```
+
+`) and exported as `testdata/SL2-12E_dff_route.xpn` (SD=0) and
+`testdata/SL2-12E_dff_lut.xpn` (SD=1).  `counter.xpn` covers synchronous reset
+plus CE.  `tests/test_xist_sliceprog.py` compares the synthesised program's
+configuration/property fields with all six vendor slices and they match exactly.
+
 Still open:
 
 * ``CE``/reset/set use the slice-level ``CEMUX``/``LSRMUX`` muxes.  The chipdb
@@ -666,8 +713,11 @@ Still open:
   clear error instead of routing them to a non-existent pin.
 * ALU slice mode has no programming model yet; `demo_any` synthesises with
   ``synth_gowin -noalu`` so adders become LUT logic.
-* The ``OFX`` mux (which feeds ``DI``) does not appear in the BFD exports, so a
-  DFF bitstream cannot be written until that mux is extracted.
+* ``SD=0`` (data from the routed ``M`` input) is not in the chipdb: the placer
+  cannot route to ``M``, so the packer inserts an identity LUT instead.
+* There is no routed.json -> `.bit` writer yet.  The next step is to collect the
+  used pips as arcs, synthesise the slice programs above, and reuse
+  `xist/build.py`'s fuse encoders.
 
 ### PIO configuration model
 
