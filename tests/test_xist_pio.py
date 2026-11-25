@@ -43,6 +43,19 @@ def test_env_for_and_input_bits():
     assert bits[(47, 2375)] is True
 
 
+def test_top_edge_bits():
+    eqs, meta = load_profile(PIO, "PIC_T5")
+    comp = Comp("a", "PT13A", INPUT_PROGRAM)
+    env = env_for([comp])
+    assert ("PIO_A", "IOBUF.IO_TYPE") in env["props"]
+    bits = {(r, c): v for r, c, v in
+            bits_from_equations(eqs, [comp], 1, 1788, 1108)}
+    # measured on the top-edge probe (row base 1108)
+    assert bits[(1109, 1777)] is True
+    assert bits[(1109, 1751)] is True
+    assert meta["rows"] == 6
+
+
 def test_parse_comps_quoted_and_unquoted(tmp_path):
     p = tmp_path / "x.xpn"
     p.write_text('''design top

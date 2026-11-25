@@ -90,8 +90,10 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   bitstream exactly: 411404/411404 configuration bits over 1789 tile groups,
   both read-only and through `program_pio`.  The sidecar points the writer at
   the profile (`pio_config`).
-  Remaining: PIC_top/bot need their row base and profile; the `-12k` corners
-  are not mapped.
+  Top/bottom pads are the 6-row PIC_T5/PIC_B5 profiles at row base 1108/1102
+  (column 7/45 use a -2/-1 base correction).  All 3353 edge tile groups match
+  322991/322991 bits (100%), read-only and through `program_pio`.
+  Remaining: the `-12k` corners are not mapped.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch

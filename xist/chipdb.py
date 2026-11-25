@@ -61,8 +61,14 @@ class XistChip:
             # PIO configuration is not a routing arc: the writer evaluates the
             # stored property()/config() equations against the XPN comp program.
             "pio_config": {
-                "PIC": {"profile": "PIC_L5", "col_base": 2375},
-                "PIC_right": {"profile": "PIC_R5", "col_base": 60},
+                "PIC": {"profile": "PIC_L5", "col_base": 2375,
+                        "row_rule": "29*(row-1)+ram_row"},
+                "PIC_right": {"profile": "PIC_R5", "col_base": 60,
+                              "row_rule": "29*(row-1)+ram_row"},
+                "PIC_top": {"profile": "PIC_T5", "row_base": 1108},
+                "PIC_bot": {"profile": "PIC_B5", "row_base": 1102},
+                "column_delta": {"T": {"7": -2, "45": -1},
+                                 "B": {"7": -2, "45": -1}},
                 "file": "SL2-12E_bfd_pio.json",
                 "site_rule": "XPN site P<side><row><slot> -> BFD site PIO_<slot>",
             },

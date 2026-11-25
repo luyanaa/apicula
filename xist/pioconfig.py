@@ -90,16 +90,21 @@ def evaluate_config(tile: BfdTile, comps: list[Comp],
     return {name: evaluate(ast, env) for name, ast, _ in eqs}
 
 
-def bits_from_equations(eqs, comps: list[Comp], tile_row: int, col_base: int
+def bits_from_equations(eqs, comps: list[Comp], tile_row: int, col_base: int,
+                        row_base: int | None = None
                         ) -> list[tuple[int, int, bool]]:
-    """Absolute ``(bit_row, bit_col, value)`` from a stored equation list."""
+    """Absolute ``(bit_row, bit_col, value)`` from a stored equation list.
+
+    ``row_base`` is 1108 for the top edge and 1102 for the bottom edge; when
+    omitted the regular 29-row pitch is used.
+    """
     env = env_for(comps)
+    rbase = row_base if row_base is not None else 29 * (tile_row - 1)
     out = []
     for name, ast, positions in eqs:
         value = evaluate(ast, env)
         for (ram_row, ram_col) in positions:
-            out.append((29 * (tile_row - 1) + ram_row,
-                        col_base - ram_col, value))
+            out.append((rbase + ram_row, col_base - ram_col, value))
     return out
 
 

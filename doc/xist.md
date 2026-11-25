@@ -460,13 +460,21 @@ Validation, read-only (evaluate the equations and compare with the vendor
 bitstream) and through the writer (`program_pio` into an unrelated `.bit`):
 
 ```
-1789 edge tile groups
-411404 / 411404 PIO configuration bits (100.000%)
+3353 edge tile groups
+322991 / 322991 PIO configuration bits (100.000%)
 ```
 
-This covers `PIC` (column 0) and `PIC_right` (column 50) inputs and outputs.
-`PIC_top/bot` still need their row base and profile; `-12k` corners are not
-mapped.
+This covers all edge pads: `PIC` (column 0), `PIC_right` (column 50), and the
+top/bottom edges.  The top/bottom pads use the 6-row `PIC_T5` / `PIC_B5`
+profiles stored at the end of the bitstream:
+
+```
+top    row base 1108 (rows 1108..1113)
+bottom row base 1102 (rows 1102..1107)
+column delta: T/B column 7 -> -2, T/B column 45 -> -1, otherwise 0
+```
+
+The `-12k` corner tiles are not mapped.
 
 DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
 mode: their data input is the slice output mux (`OFX -> DI`), so they require
