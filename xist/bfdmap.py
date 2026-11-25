@@ -119,6 +119,7 @@ def export(tile: BfdTile, cal: Calibration, out: Path) -> dict:
                                  and "property(" not in e),
         "fuses": fuses,
         "arc_fuses": arcs,
+        "special_fuses": tile.special_fuses(),
     }
     Path(out).write_text(json.dumps(data, indent=1) + "\n")
     return data

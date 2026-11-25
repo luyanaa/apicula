@@ -139,6 +139,77 @@ def test_profiles_complete():
     assert len(cov["tile_types"]) == 56
 
 
+SPECIAL_BFD = """\
+Tile "PIO" Rows=2 Columns=2 Rams=4 Nodes=3
+{
+   Nodes
+   {
+      A,
+      B,
+      C
+   }
+   Ram Row=0
+   {
+      F0, F1
+   }
+   Ram Row=1
+   {
+      F2, F3
+   }
+   F0 = (!arcval(A,B) && wire(B));
+   F1 = arcval(B,C);
+}
+
+"""
+
+
+def test_special_fuse_parse(tmp_path):
+    p = tmp_path / "b.txt"
+    p.write_text(SPECIAL_BFD)
+    t = parse(p)["PIO"]
+    assert t.special_fuses() == {
+        "F0": {"arc": ["A", "B"], "guard": "B", "invert": True}}
+    # the special fuse is not a normal routing equation
+    assert set(routing_equations(t)) == {"F1"}
+
+
+def test_special_fuse_program(tmp_path):
+    from xist.bfdmap import Calibration
+    from xist.program import program_routing
+    p = tmp_path / "b.txt"
+    p.write_text(SPECIAL_BFD)
+    t = parse(p)["PIO"]
+    cal = Calibration({5: 100})
+
+    # A -> B used: !arcval(A,B) is false, so the guarded fuse is 0
+    xpn1 = tmp_path / "x1.xpn"
+    xpn1.write_text('signal "x"\n{\n   (a, p)\n   route\n   {\n'
+                    "      R2C5_A.R2C5_B;\n   }\n}\n")
+    bs = _make_bs()
+    program_routing(bs, xpn1, t, cal, 2, 5)
+    assert bs.rows[29][100] == "0"
+
+    # C <- B used: the (A,B) arc is unused but wire B is active -> fuse 1
+    xpn2 = tmp_path / "x2.xpn"
+    xpn2.write_text('signal "x"\n{\n   (a, p)\n   route\n   {\n'
+                    "      R2C5_C.R2C5_B;\n   }\n}\n")
+    bs = _make_bs()
+    n = program_routing(bs, xpn2, t, cal, 2, 5)
+    assert n == 2                     # F1 plus the special F0
+    assert bs.rows[29][100] == "1"
+    assert bs.rows[29][99] == "0"     # F1 = arcval(B,C) unused
+
+
+def test_special_profile_install():
+    from xist.bfd_chipdb import special_pip_fuses
+    profile = {"fuses": {"INDEL": [[2, 10]]},
+               "special_fuses": {"INDEL": {"arc": ["JPADDIA_PIO", "JDIA"],
+                                           "guard": "JDIA", "invert": True}}}
+    sp = special_pip_fuses(profile)
+    assert sp == [dict(src="JDIA", dst="JPADDIA_PIO", row=2, col=10,
+                       fuse="INDEL", guard="JDIA", invert=True)]
+
+
 def _make_bs(rows=40, cols=120):
     return Bitstream(
         header_lines=["XIST ASCII Bitstream", "Version:          1.0",

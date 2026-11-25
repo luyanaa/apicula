@@ -38,6 +38,11 @@ _TILE_RE = re.compile(r'^Tile "([^"]+)"\s+Rows=(\d+)\s+Columns=(\d+)')
 _RAM_RE = re.compile(r"^\s*Ram Row=(\d+)\s*$")
 _EQ_RE = re.compile(r"^\s*([A-Za-z0-9_/\[\].]+)\s*=\s*(.*)$")
 _ARC_RE = re.compile(r"arcval\(([^,]+),([^)]+)\)")
+# Simple negated-guard form used by the PIO input-delay fuses:
+#   (!arcval(JPADDIA_PIO,JDIA) && wire(JDIA))
+_SPECIAL_RE = re.compile(
+    r"^\s*\(*\s*!arcval\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)\s*"
+    r"&&\s*wire\(\s*([^)]+?)\s*\)\s*\)*\s*$")
 _CONFIG_RE = re.compile(r"(?:config|property|comp)\(([^)]*)\)")
 
 
@@ -85,6 +90,16 @@ class BfdTile:
                 for (r, c) in positions:
                     out.setdefault(arc, []).append(
                         dict(tile=self.name, row=r, col=c, fuse=fuse))
+        return out
+
+    def special_fuses(self) -> dict[str, dict]:
+        """Fuses of the form ``!arcval(a,b) && wire(w)`` (inverted + guarded)."""
+        out: dict[str, dict] = {}
+        for fuse, expr in self.equations.items():
+            m = _SPECIAL_RE.match(expr)
+            if m:
+                out[fuse] = dict(arc=[m.group(1), m.group(2)],
+                                 guard=m.group(3), invert=True)
         return out
 
     def arc_set(self) -> set[tuple[str, str]]:

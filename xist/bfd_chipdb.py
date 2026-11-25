@@ -39,6 +39,17 @@ def pip_fuses(profile: dict) -> dict[str, list[dict]]:
     return out
 
 
+def special_pip_fuses(profile: dict) -> list[dict]:
+    """Inverted/guarded fuses, attached to the data-direction pip (b -> a)."""
+    out = []
+    for fuse, meta in profile.get("special_fuses", {}).items():
+        a, b = meta["arc"]
+        for rc in profile.get("fuses", {}).get(fuse, []):
+            out.append(dict(src=b, dst=a, row=rc[0], col=rc[1], fuse=fuse,
+                            guard=meta.get("guard"), invert=bool(meta.get("invert"))))
+    return out
+
+
 def _wire_names(tt) -> dict[int, str]:
     idx = {v: k for k, v in tt.strs.strs.items()}
     return {w.index: idx[w.name.index] for w in tt.wires}
@@ -74,4 +85,16 @@ def install_profile(chip: Chip, token: str, profile: dict) -> dict[str, list[dic
             continue
         tt.create_pip(src, dst)
         existing_named.add((src, dst))
+
+    # inverted + wire-guarded fuses (e.g. the PIO input-delay bits)
+    for sp in special_pip_fuses(profile):
+        for w in (sp["src"], sp["dst"]):
+            if not tt.has_wire(w):
+                tt.create_wire(w)
+        if (sp["src"], sp["dst"]) not in existing_named:
+            tt.create_pip(sp["src"], sp["dst"])
+            existing_named.add((sp["src"], sp["dst"]))
+        key = f"{sp['src']}->{sp['dst']}"
+        arcs.setdefault(key, []).append(
+            {k: sp[k] for k in ("row", "col", "fuse", "guard", "invert")})
     return arcs

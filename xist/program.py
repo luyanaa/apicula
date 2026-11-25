@@ -96,11 +96,28 @@ def used_arcs(path: str | Path, tile_row: int, tile_col: int,
     return used
 
 
+def used_wires(path: str | Path, tile_row: int, tile_col: int,
+               tile=None) -> set[str]:
+    """Local wires that appear in the tile's routed pips (aliases resolved)."""
+    prefix = f"R{tile_row}C{tile_col}_"
+    alias = tile.aliases if tile is not None else {}
+    out = set()
+    for sig in parse_xpn(path).values():
+        for src, dst in sig.route:
+            if src.startswith(prefix) and dst.startswith(prefix):
+                for w in (wire_local(src), wire_local(dst)):
+                    out.add(alias.get(w, w))
+    return out
+
+
 def routing_equations(tile) -> dict[str, tuple[set[tuple[str, str]], list]]:
     """Fuses driven only by routing arcs -> (arcs, ram positions)."""
     from .bfd import _ARC_RE
+    special = tile.special_fuses()
     out = {}
     for name, expr in tile.equations.items():
+        if name in special:
+            continue
         if "arcval" not in expr or "config(" in expr or "property(" in expr:
             continue
         arcs = {(m.group(1).strip(), m.group(2).strip())
@@ -118,10 +135,27 @@ def program_routing(bs: Bitstream, xpn_path: str | Path, tile, cal,
     end, see :mod:`xist.bfdmap`).
     """
     used = used_arcs(xpn_path, tile_row, tile_col, tile)
+    wires = used_wires(xpn_path, tile_row, tile_col, tile)
     n = 0
     for arcs, positions in routing_equations(tile).values():
         val = not arcs.isdisjoint(used)
         for (rr, rc) in positions:
+            br, bc = cal.bit(tile_row, tile_col, rr, rc)
+            if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+                _set(bs, br, bc, val)
+                n += 1
+    # inverted + wire-guarded fuses: fuse=1 iff the arc is unused and the
+    # guarded wire is active (e.g. INDEL = !arcval(PIO,JDI) && wire(JDI))
+    for name, meta in tile.special_fuses().items():
+        a, b = meta["arc"]
+        guard = tile.aliases.get(meta["guard"], meta["guard"])
+        arc_used = (a, b) in used
+        val = (not arc_used) and (guard in wires)
+        if meta.get("invert"):
+            pass
+        else:
+            val = not val
+        for (rr, rc) in tile.fuse_positions(name):
             br, bc = cal.bit(tile_row, tile_col, rr, rc)
             if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
                 _set(bs, br, bc, val)

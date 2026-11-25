@@ -79,8 +79,11 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   Still synthetic: PIC (column 0), PIC_right (column 50), PIC_top/bot and the
   `-12k` corners.  Their bits live in the neighbouring 59-column block and
   their equations include negated arcs + wire guards
-  (`!arcval(...) && wire(...)`), which the positive arc-only writer does not
-  model yet.
+  (`!arcval(...) && wire(...)`).  The parser/export and `program_routing` now
+  support that form, but the PIO mapping itself is not settled: the 59-column
+  edge tile type varies by row, and the INDEL fuses move with it.  A
+  per-row/per-slot probe campaign is required; enabling the current guess
+  would write wrong bits.
 * `.bit` checksum and `.bin` compression.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch

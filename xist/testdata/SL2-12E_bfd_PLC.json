@@ -18352,5 +18352,6 @@
   "VSTX0300->HSBX0400": [
    "XROUTING/XPSCLK_BUF/MC1_CLKEN_1"
   ]
- }
+ },
+ "special_fuses": {}
 }

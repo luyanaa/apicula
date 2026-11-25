@@ -395,7 +395,20 @@ and their equations include negated arcs and wire guards, e.g.
 MC1_INDEL_0 = !arcval(JPADDIA_PIO,JDIA) && wire(JDIA)
 ```
 
-so the positive arc-only writer is not correct for them yet.
+The parser, profile export and writer now support that form:
+`BfdTile.special_fuses()` records `{arc, guard, invert}`, the profile JSON
+carries a `special_fuses` section, the chipdb attaches it to the
+data-direction pip, and `program_routing` evaluates
+`fuse = !used(arc) && used(guard)`.
+
+Enabling it for PIC is still blocked by the mapping, not the semantics.  A
+controlled A/B probe (same design, input pad D4/PL2A vs D1/PL5D) isolated the
+left slot-A bit at `(29*(tile_row-1)+2, 2361)` (column base 2371), but over the
+routed corpus the literal rule matches only 80% (slot A) to 100% (slots B-D)
+depending on how the XPN pair orientation is read, and the vendor's left-edge
+tile varies by row (`PIC_L5`, `PIC_L0_DUMMY`, `LLC5PIC`, `CIB_EBR0_END0...`)
+with different INDEL rows/columns.  A per-row, per-slot probe campaign is
+needed before these fuses can be trusted in a writer.
 
 DFF-heavy designs (`dff_chain`, `counter8`, `shift8`) do not route in BFD-only
 mode: their data input is the slice output mux (`OFX -> DI`), so they require
