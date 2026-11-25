@@ -104,8 +104,9 @@ The uarch's bitstream writer will load these when emitting `.bit`.
 * Packer status: LUT/DFF clustering, constants and DFF CE/reset are done
   (`xist.cc`); IO attributes are still dropped (PIO config is not synthesised).
 * Bitstream writer: `xist/bitgen.py` consumes a routed JSON and emits routing +
-  slice configuration (incl. CE/reset) + LUT INIT; PIO and the uncalibrated
-  spine/pad contexts are not written yet.
+  slice configuration (incl. CE/reset) + LUT INIT + edge PIO configuration.
+  Edge-tile routing (columns 0/50) and the uncalibrated spine contexts are not
+  written yet.
 
 ## Next milestones
 

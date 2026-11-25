@@ -18,6 +18,9 @@ import pytest
 
 from xist.bitgen import (SLICE_LETTERS, routed_cells, routed_pips,
                          slice_facts, write_bitstream)
+from xist.apply import _config, apply_pio_comps
+from xist.pioconfig import bits_from_equations
+from xist.piogen import PIO_IN, PIO_OUT
 from xist.bitstream import Bitstream
 from xist.lutinit import init_from_function
 from xist.sliceconfig import parse_slice_program
@@ -167,6 +170,7 @@ def test_own_routed_ce_reset_design(tmp_path):
     out = tmp_path / "ctr4.bit"
     res = write_bitstream(EMPTY_BIT, out, routed=routed, verbose=False)
     assert res["checksum"]
+    assert res["pio"] >= 95      # one edge pad at least
 
     from xist.bfdmap import load_calibration
     cal = load_calibration()
@@ -221,6 +225,37 @@ def test_own_routed_ce_reset_design(tmp_path):
                 for rr, rc in info["positions"]:
                     assert bit_of(row, col, rr, rc) == "1"
     assert checked > 0
+
+
+def test_pio_defaults_match_vendor_pads():
+    """Synthesised pad programs reproduce vendor config for real user pads."""
+    from xist.xpn import Comp
+    from xist.bfdmap import load_calibration
+
+    data, eqs = _config("")
+    cal = load_calibration()
+    comps = list(parse_comps(COUNTER_XPN).values())
+    vendor = Bitstream.read(str(VENDOR_BIT))
+    pads = {"PL12C": "L", "PB16A": "B", "PT19A": "T"}
+    seen = 0
+    for comp in comps:
+        if comp.site not in pads:
+            continue
+        side = pads[comp.site]
+        pos = int(comp.site[2:-1])
+        synth = Comp(comp.name, comp.site,
+                     PIO_IN if "PADDI:PADDI" in comp.program else PIO_OUT)
+        if side in "LR":
+            base, rbase, tile_row = (2375 if side == "L" else 60), None, pos
+        else:
+            base = cal.column_base[pos] + data["column_delta"].get(
+                side, {}).get(str(pos), 0)
+            rbase, tile_row = data["row_base"][side], pos
+        bits = bits_from_equations(eqs[side], [synth], tile_row, base, rbase)
+        for br, bc, val in bits:
+            assert (vendor.rows[br][bc] == "1") == val, (comp.site, br, bc)
+        seen += 1
+    assert seen == 3
 
 
 def test_counter_control_fuses_set(counter_replay_bit):

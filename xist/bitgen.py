@@ -36,11 +36,13 @@ from pathlib import Path
 
 from .bfdmap import load_calibration
 from .bitstream import Bitstream
+from .apply import PROFILE, apply_pio_comps, profile_config_equations
 from .build import (TESTDATA, _set, program_lut_inits, program_plc_used,
                      program_plc_rows, program_slice_comps, site_of)
 from .chipdb import _context_name, default_bfd_profiles
 from .device import parse_udev_report
 from .sliceprog import SliceFacts, slice_program
+from .piogen import pio_comps
 from .xpn import Comp
 
 _XY = re.compile(r"X(\d+)Y(\d+)")
@@ -199,9 +201,16 @@ def write_bitstream(base: str | Path, out: str | Path, *,
                                       base_row,
                                       used=pips.get((row, col), set()))
 
+    pio_list = pio_comps(routed) if routed is not None else []
+    edge_eqs = {side: profile_config_equations(profiles[PROFILE[side]])
+                for side in "LRTB"}
+    npio = apply_pio_comps(bs, pio_list, calibration=cal,
+                           profile_eqs=edge_eqs)
+    nbits += npio
+
     bs.update_checksum()
     bs.write(str(out))
-    result = dict(bits=nbits, checksum=bs.extra16,
+    result = dict(bits=nbits, pio=npio, checksum=bs.extra16,
                   unmodelled=sorted(unmodelled),
                   tiles=len(all_tiles))
     if verbose:

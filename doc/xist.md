@@ -726,9 +726,12 @@ Still open:
   ``synth_gowin -noalu`` so adders become LUT logic.
 * ``SD=0`` (data from the routed ``M`` input) is not in the chipdb: the placer
   cannot route to ``M``, so the packer inserts an identity LUT instead.
-* PIO configuration is not synthesised from nextpnr yet, and the ``PIC`` tiles
-  in columns 0/50 have no BFD profile, so edge-pad routing is left at the
-  template value.
+* The ``PIC`` tiles in columns 0/50 have no BFD routing profile, so nets that
+  pass through an edge tile (left/right pads) keep the template routing value.
+  Pad *configuration* is written; edge routing fuses are not.
+* IOLOGIC is not modelled: a register placed inside an I/O cell by the vendor
+  is instead built as a slice DFF plus a pad, and output pads use
+  ``DATAMUX:PADDO``.
 
 ### Bitstream writer from routed JSON
 
@@ -749,9 +752,13 @@ python -m xist.bitgen --base empty.bit --routed routed.json --out design.bit
 * **LUT INIT.**  Written from the routed LUT ``INIT`` parameter for both banks
   of every instantiated slice; entirely uninstantiated slices are left alone
   (the vendor leaves them at 0).
-* **Not written.**  PIO configuration (needs the IOBUF properties the converter
-  does not carry yet) and the uncalibrated spine/pad contexts, which keep the
-  template value and are reported by the CLI.
+* **PIO configuration.**  `piogen.py` synthesises the pad program from the PIO
+  cell direction (see below); `apply.apply_pio_comps()` writes it, together with
+  the IOLOGIC/PULLUP pure-config fuses of the edge tile profile so stale
+  template values are cleared.
+* **Not written.**  Routing through the `PIC` tiles in columns 0/50 (no BFD
+  profile yet) and the uncalibrated spine contexts; these keep the template
+  value and are reported by the CLI.
 
 Two encoder bugs surfaced while validating this path:
 
@@ -779,6 +786,38 @@ The 8 edge bits are `config(PIO_...)` FIBMEM fuses, i.e. the missing PIO path,
 not routing/slice logic.  `tests/test_xist_bitgen.py` asserts the interior PLC
 result, the CE/LSR mux fuses, `REGSET=RESET`, `LSRONMUX` and `SRMODE`, and an
 end-to-end run of a design with async reset + CE through nextpnr.
+
+### PIO synthesis for nextpnr
+
+The XPN carries a per-pad program (`IOBUF:::IO_TYPE=LVCMOS25,... PGMUX:INBUF`),
+which a routed JSON does not.  `xist/piogen.py` rebuilds it from the PIO cell's
+direction with the vendor's default I/O standard, measured from the counter
+design's user pads:
+
+```
+input   PADDI:PADDI IOBUF PULLMODE=DOWN IO_TYPE=LVCMOS25 CLAMP=ON
+        HYSTERESIS=SMALL PGMUX:INBUF INRDMUX:PGMUX
+output  TRIMUX:PADDT IOBUF PULLMODE=NONE DRIVE=8 SLEWRATE=SLOW CLAMP=OFF
+        DATAMUX:PADDO ODMUX:TRIMUX LVDSMUX:DATAMUX
+```
+
+The pad site (`PT19A`, `PB19A`, `PL12C`...) is reconstructed from the PIO bel
+position (row 0 top, row 39 bottom, column 0 left, column 50 right) because that
+is the name `pioconfig.env_for` keys on.  Outputs select `DATAMUX:PADDO`
+(fabric -> pad); the vendor sometimes writes `IOLDO` because it moves a register
+into the I/O cell, but those fuses are gated by `IOLOGIC` modes this uarch does
+not have.
+
+Validation against the vendor `counter` bitstream: for the three user pads that
+are not driven through IOLOGIC (`PL12C` input, `PB16A` input, `PT19A` output)
+all 95 PIO config bits each match the vendor bitstream.  The four `q` pads
+(`PB19A-D`) differ in 4 bits each: the vendor enables its output IOLOGIC
+registers there, which the uarch does not implement.  The three internal
+`HQ_IOH_*` status pads differ by PULLMODE=UP vs the user-pad default DOWN; they
+are not routed user pins.
+
+`tests/test_xist_bitgen.py` checks those three pads and that a routed design
+with pads writes PIO bits (440 positions, no mismatch).
 
 ### PIO configuration model
 
