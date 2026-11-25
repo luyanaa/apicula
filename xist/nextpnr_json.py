@@ -35,7 +35,16 @@ from pathlib import Path
 
 LUT_BITS = {"LUT1": 2, "LUT2": 4, "LUT3": 8, "LUT4": 16}
 DFF_TYPES = {"DFF", "DFFR", "DFFS", "DFFE", "DFFRE", "DFFSE",
-             "DFFN", "DFFNR", "DFFNS", "DFFNE", "DFFNRE", "DFFNSE"}
+             "DFFN", "DFFNR", "DFFNS", "DFFNE", "DFFNRE", "DFFNSE",
+             "DFFC", "DFFCE", "DFFNC", "DFFNCE",
+             "DFFP", "DFFPE", "DFFNP", "DFFNPE"}
+# Gowin's DFFC/DFFP spell the reset/set ports CLEAR/PRESET
+DFF_RESET = {"DFFR", "DFFRE", "DFFNR", "DFFNRE",
+             "DFFC", "DFFCE", "DFFNC", "DFFNCE"}
+DFF_SET = {"DFFS", "DFFSE", "DFFNS", "DFFNSE",
+           "DFFP", "DFFPE", "DFFNP", "DFFNPE"}
+DFF_CE = {"DFFE", "DFFRE", "DFFSE", "DFFNE", "DFFNRE", "DFFNSE",
+          "DFFCE", "DFFNCE", "DFFPE", "DFFNPE"}
 
 
 def _expand_lut(init: str, nbits: int) -> str:
@@ -83,22 +92,23 @@ def convert(module: dict) -> dict:
                     new_conn[dst] = conn[src]
             params_out: dict = {}
             negative = typ.startswith("DFFN")
-            # DFFN* latches ~D: keep that as a register polarity instead of
-            # pushing an inverter into the LUT
+            # DFFN* is a negative-edge register, not inverted data
             if negative:
                 params_out["CLK_POLARITY"] = "0"
-            if "R" in conn and "_R" not in typ.replace("DFFRE", "DFF_RE").replace("DFFNRE", "DFFN_RE") or "R" in typ:
-                pass
-            # reset / set presence, with the vendor's active sense
-            if "R" in conn and "R" in typ:
-                new_conn["R"] = conn["R"]
-                params_out["RESET"] = "1"
-                params_out["RESET_POLARITY"] = "0" if negative else "1"
-            if "S" in conn and "S" in typ:
-                new_conn["S"] = conn["S"]
-                params_out["SET"] = "1"
-                params_out["SET_POLARITY"] = "0" if negative else "1"
-            if "CE" in conn and "E" in typ:
+            # reset / set: R/S and the CLEAR/PRESET aliases of DFFC/DFFP
+            if typ in DFF_RESET:
+                pin = "CLEAR" if "CLEAR" in conn else "R"
+                if pin in conn:
+                    new_conn["R"] = conn[pin]
+                    params_out["RESET"] = "1"
+                    params_out["RESET_POLARITY"] = "1"
+            if typ in DFF_SET:
+                pin = "PRESET" if "PRESET" in conn else "S"
+                if pin in conn:
+                    new_conn["S"] = conn[pin]
+                    params_out["SET"] = "1"
+                    params_out["SET_POLARITY"] = "1"
+            if typ in DFF_CE and "CE" in conn:
                 new_conn["CE"] = conn["CE"]
                 params_out["CE"] = "1"
             dirs = {"D": "input", "CLK": "input", "Q": "output"}

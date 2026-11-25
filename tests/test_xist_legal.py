@@ -57,6 +57,12 @@ def test_dff_semantics_preserved():
         "d4": {"type": "DFFNRE", "connections": {"D": "a", "CLK": "c", "R": "r",
                                                  "CE": "e", "Q": "q4"},
                "parameters": {}, "attributes": {}},
+        "d5": {"type": "DFFCE", "connections": {"D": "a", "CLK": "c", "CE": "e",
+                                                "CLEAR": "r", "Q": "q5"},
+               "parameters": {}, "attributes": {}},
+        "d6": {"type": "DFFPE", "connections": {"D": "a", "CLK": "c", "CE": "e",
+                                                "PRESET": "s", "Q": "q6"},
+               "parameters": {}, "attributes": {}},
     }}
     out = convert(mod)["cells"]
     assert out["d1"]["parameters"] == {}
@@ -64,8 +70,15 @@ def test_dff_semantics_preserved():
     assert out["d2"]["parameters"]["RESET_POLARITY"] == "1"
     assert out["d3"]["parameters"]["CE"] == "1"
     assert out["d4"]["parameters"]["CLK_POLARITY"] == "0"
-    assert out["d4"]["parameters"]["RESET_POLARITY"] == "0"
+    # the clock edge is inverted in DFFN*, the reset sense is not
+    assert out["d4"]["parameters"]["RESET_POLARITY"] == "1"
     assert "R" in out["d4"]["connections"] and "CE" in out["d4"]["connections"]
+    assert out["d5"]["parameters"] == {"RESET": "1", "RESET_POLARITY": "1",
+                                       "CE": "1"}
+    assert {"R", "CE", "D", "CLK", "Q"} <= set(out["d5"]["connections"])
+    assert out["d6"]["parameters"] == {"SET": "1", "SET_POLARITY": "1",
+                                       "CE": "1"}
+    assert "S" in out["d6"]["connections"]
 
 
 def test_constants_kept():

@@ -101,14 +101,18 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   0x1FE2; verified on 371 vendor bitstreams).  `.bin` compression is still
   unknown.
 * Timing model.
-* Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch
-  only removes nextpnr's synthetic IOBs.
+* Packer status: LUT/DFF clustering, constants and DFF CE/reset are done
+  (`xist.cc`); IO attributes are still dropped (PIO config is not synthesised).
+* Bitstream writer: `xist/bitgen.py` consumes a routed JSON and emits routing +
+  slice configuration (incl. CE/reset) + LUT INIT; PIO and the uncalibrated
+  spine/pad contexts are not written yet.
 
 ## Next milestones
 
 1. Routing golden corpus: generate designs that exercise every wire type, dump
    XPN, and build a connected graph (bel pins already use the vendor names).
 2. Per-tile LUT calibration or an equivalence-class table.
-3. Real packer + bitstream writer for LUT/DFF/PIO on SL2-12E.
+3. Bitstream writer follow-ups: PIO configuration from nextpnr, PIC tile
+   profiles, and the `.bin` format.
 4. Yosys `synth_xist` derived from `synth_gowin`.
 5. Timing sampling from `ta.report` and PVT fit.

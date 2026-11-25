@@ -40,25 +40,30 @@ def _is_config_fuse(profile: dict, fuse: str) -> bool:
     expr = (profile.get("fuse_exprs") or {}).get(fuse, "")
     if "config(" in expr or "property(" in expr:
         return True
-    if not expr.strip() or expr.strip().upper() == "FALSE":
+    if expr.strip().upper() == "FALSE":
         return True
     if "!arcval" in expr or "wire(" in expr:
         return True
+    # ``arc_fuses`` only lists positive arc muxes, and the PLC profile carries
+    # no fuse_exprs at all, so an absent expression is a plain routing fuse.
     return False
 
 
 def _fuse_arcs(profile: dict) -> dict[str, set[tuple[str, str]]]:
     out: dict[str, set[tuple[str, str]]] = {}
+    amap = profile.get("aliases") or {}
     for arc, names in profile["arc_fuses"].items():
         src, dst = arc.split("->", 1)
+        src, dst = amap.get(src, src), amap.get(dst, dst)
         for name in names:
             out.setdefault(name, set()).add((src, dst))
     return out
 
 
-def program_plc(bs: Bitstream, xpn_path, profile: dict, aliases: dict,
-                cal, tile_row: int, tile_col: int) -> int:
-    used = used_arcs(xpn_path, tile_row, tile_col)
+def program_plc_used(bs: Bitstream, profile: dict, aliases: dict,
+                     cal, tile_row: int, tile_col: int,
+                     used: set[tuple[str, str]]) -> int:
+    """Program a tile's routing fuses from an explicit used-arc set."""
     amap = dict(aliases or {})
     amap.update(profile.get("aliases") or {})
     used = {(amap.get(a, a), amap.get(b, b)) for a, b in used}
@@ -73,6 +78,12 @@ def program_plc(bs: Bitstream, xpn_path, profile: dict, aliases: dict,
                 _set(bs, br, bc, val)
                 n += 1
     return n
+
+
+def program_plc(bs: Bitstream, xpn_path, profile: dict, aliases: dict,
+                cal, tile_row: int, tile_col: int) -> int:
+    return program_plc_used(bs, profile, aliases, cal, tile_row, tile_col,
+                            used_arcs(xpn_path, tile_row, tile_col))
 
 
 VARMAP = {"A": 0, "B": 1, "C": 2, "D": 3}
@@ -93,6 +104,34 @@ def _site_refs(node, out=None) -> set[str]:
     return out
 
 
+def program_slice(bs: Bitstream, xpn_path, slice_json: dict, cal,
+                  tile_row: int, tile_col: int) -> int:
+    return program_slice_comps(bs, list(parse_comps(xpn_path).values()),
+                               slice_json, cal, tile_row, tile_col)
+
+
+def program_lut_inits(bs: Bitstream, lut_init: dict, cal,
+                      tile_row: int, tile_col: int,
+                      inits: dict[str, dict[int, int]]) -> int:
+    """Write LUT INIT bits directly: site -> bank -> 16-bit integer."""
+    n = 0
+    for site, banks in inits.items():
+        if site not in lut_init:
+            continue
+        for bank, init in banks.items():
+            bank_map = lut_init[site].get(str(bank)) or lut_init[site].get(bank)
+            if bank_map is None:
+                continue
+            for j, (rr, rc) in enumerate(bank_map):
+                if rr is None:
+                    continue
+                br, bc = cal.bit(tile_row, tile_col, rr, rc)
+                if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+                    _set(bs, br, bc, not ((init >> j) & 1))
+                    n += 1
+    return n
+
+
 def program_luts(bs: Bitstream, xpn_path, lut_init: dict, cal,
                  tile_row: int, tile_col: int) -> int:
     """Program LUT INIT from the XPN slice function (K0 -> bank 0, K1 -> bank 1)."""
@@ -107,12 +146,17 @@ def program_luts(bs: Bitstream, xpn_path, lut_init: dict, cal,
         if not m or (int(m.group(1)), int(m.group(2))) != (tile_row, tile_col):
             continue
         _props, _cfgs, funcs = parse_slice_program(comp.program)
+        if ("MODE", "LOGIC") not in _cfgs:
+            # RAM/carry modes use their own configuration, not LUT INIT zeros
+            continue
         for bank, key in ((0, "K0"), (1, "K1")):
             expr = funcs.get(key)
             bank_map = lut_init[site].get(str(bank)) or lut_init[site].get(bank)
-            if not expr or bank_map is None:
+            if bank_map is None:
                 continue
-            init = init_from_function(expr, VARMAP)
+            # an instantiated logic slice with no function on this bank has
+            # INIT 0 in the vendor bitstream
+            init = init_from_function(expr, VARMAP) if expr else 0
             for j, (rr, rc) in enumerate(bank_map):
                 if rr is None:
                     continue
@@ -124,9 +168,11 @@ def program_luts(bs: Bitstream, xpn_path, lut_init: dict, cal,
 
 
 def program_plc_rows(bs: Bitstream, xpn_path, profile: dict, cal,
-                     tile_row: int, tile_col: int, base_row: int) -> int:
+                     tile_row: int, tile_col: int, base_row: int,
+                     used=None) -> int:
     """Same as program_plc() but for the 6-row top/bottom blocks."""
-    used = used_arcs(xpn_path, tile_row, tile_col)
+    if used is None:
+        used = used_arcs(xpn_path, tile_row, tile_col)
     amap = dict(profile.get("aliases") or {})
     used = {(amap.get(a, a), amap.get(b, b)) for a, b in used}
     n = 0
@@ -143,21 +189,19 @@ def program_plc_rows(bs: Bitstream, xpn_path, profile: dict, cal,
     return n
 
 
-def program_slice(bs: Bitstream, xpn_path, slice_json: dict, cal,
-                  tile_row: int, tile_col: int) -> int:
+def site_of(site: str) -> tuple[int, int] | None:
+    """``R20C19D`` -> (20, 19); None for non-router sites."""
+    m = __import__("re").match(r"R(\d+)C(\d+)[A-D]$", site)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def program_slice_comps(bs: Bitstream, comps, slice_json: dict, cal,
+                        tile_row: int, tile_col: int) -> int:
     eqs = [(name, parse_cached(info["expr"]),
             [tuple(p) for p in info["positions"]])
            for name, info in slice_json["fuses"].items()]
-    comps = []
-    for comp in parse_comps(xpn_path).values():
-        site = comp.site
-        if not site or not site.startswith("R"):
-            continue
-        if site[1:site.index("C")] != str(tile_row):
-            continue
-        if int(site[site.index("C") + 1:-1]) != tile_col:
-            continue
-        comps.append(comp)
+    comps = [c for c in comps
+             if c.site and site_of(c.site) == (tile_row, tile_col)]
     env = env_for(comps)
     n = 0
     for _name, ast, positions in eqs:

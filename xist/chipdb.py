@@ -81,7 +81,7 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
     # one clock/reset wire per slice; the BFD routing arcs drive CLK0..CLK3 /
     # LSR0..LSR3, so the DFF clock pin must live on the slice's own wire.
     for s in range(4):
-        for w in (f"CLK{s}", f"LSR{s}"):
+        for w in (f"CLK{s}", f"LSR{s}", f"CE{s}"):
             tt.create_wire(w)
     for s in range(4):
         n0, n1 = 2 * s, 2 * s + 1
@@ -106,6 +106,12 @@ def _add_plc_tile_type(chip: Chip, name: str) -> None:
         for dff, n in ((d0, n0), (d1, n1)):
             tt.add_bel_pin(dff, "D", f"DI{n}", PinType.INPUT)
             tt.add_bel_pin(dff, "CLK", f"CLK{s}", PinType.INPUT)
+            # CE and reset/set are slice-wide muxes (CEMUX/LSRMUX): both banks
+            # of a slice share the same control net.  The vendor site pin for
+            # reset is LSR; the cell ports are R/S, so both names are provided.
+            tt.add_bel_pin(dff, "CE", f"CE{s}", PinType.INPUT)
+            tt.add_bel_pin(dff, "R", f"LSR{s}", PinType.INPUT)
+            tt.add_bel_pin(dff, "S", f"LSR{s}", PinType.INPUT)
             tt.add_bel_pin(dff, "Q", f"Q{n}", PinType.OUTPUT)
         # Carry/math cell: one ALU per slice, sharing the slice data inputs.
         for w in (f"CIN{n0}", f"COUT{n0}", f"SUM{n0}",

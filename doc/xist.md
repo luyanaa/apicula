@@ -542,14 +542,20 @@ It walks every tile in the device grid, picks the contextual BFD profile
 the routing muxes and LUT INIT, writes the slice configuration, applies the PIO
 configuration, and finally recomputes the checksum.
 
-Running it with a vendor bitstream as both template and source is a strong
-check: every bit it writes must already be correct.  On the 18-design validation
-corpus:
+Running it with a vendor bitstream as both template and source checks the
+encoders, but a fuse the writer never touches stays correct by construction.
+On the 18-design validation corpus:
 
 ```
 designs 18, checksum-valid 18/18
 total residual 17 of 48114000 bits = 0.000035%
 ```
+
+(This measurement hid one bug: the PLC profile carries no `fuse_exprs`, so at
+that point every PLC routing fuse was silently skipped.  Replaying against a
+*foreign* template exposed it; see "Bitstream writer from routed JSON" for the
+fixed numbers.)
+
 
 Three fixes closed most of the gap, all of the same kind - a fuse belongs to
 the tile that owns its *destination* wire:
@@ -706,18 +712,73 @@ xpn.write out.xpn ; impl.bitgen.xist.sealion out.bit
 plus CE.  `tests/test_xist_sliceprog.py` compares the synthesised program's
 configuration/property fields with all six vendor slices and they match exactly.
 
+CE and reset are supported.  The chipdb DFF bel now carries ``CE`` on the
+slice ``CE<s>`` wire and ``R``/``S`` on ``LSR<s>``; the packer no longer rejects
+them.  Because ``CEMUX``/``LSRMUX`` are slice-wide, ``isBelLocationValid()``
+also requires the two DFF banks of a slice to agree on their clock, enable and
+reset nets.  The gowin cells that spell the pins differently are converted:
+``DFFC``/``DFFCE`` (``CLEAR``) and ``DFFP``/``DFFPE`` (``PRESET``) become
+``R``/``S`` with ``RESET``/``SET`` parameters.
+
 Still open:
 
-* ``CE``/reset/set use the slice-level ``CEMUX``/``LSRMUX`` muxes.  The chipdb
-  DFF bel has only ``D``/``CLK``/``Q``, so the packer rejects those cells with a
-  clear error instead of routing them to a non-existent pin.
 * ALU slice mode has no programming model yet; `demo_any` synthesises with
   ``synth_gowin -noalu`` so adders become LUT logic.
 * ``SD=0`` (data from the routed ``M`` input) is not in the chipdb: the placer
   cannot route to ``M``, so the packer inserts an identity LUT instead.
-* There is no routed.json -> `.bit` writer yet.  The next step is to collect the
-  used pips as arcs, synthesise the slice programs above, and reuse
-  `xist/build.py`'s fuse encoders.
+* PIO configuration is not synthesised from nextpnr yet, and the ``PIC`` tiles
+  in columns 0/50 have no BFD profile, so edge-pad routing is left at the
+  template value.
+
+### Bitstream writer from routed JSON
+
+`xist/bitgen.py` assembles a `.bit` from a nextpnr `--write` JSON:
+
+```
+python -m xist.bitgen --base empty.bit --routed routed.json --out design.bit
+```
+
+* **Routing.**  A nextpnr pip is named ``X2Y2/DI0/F0`` = ``tile/dst/src``, so it
+  maps straight to the BFD arc ``F0 -> DI0``; `routed_pips()` collects them per
+  tile and `build.program_plc_used()` writes the tile's muxes.  Both endpoint
+  tiles of a routed pair are considered, matching the XPN rule that a mux fuse
+  belongs to the tile owning the destination wire.
+* **Slices.**  `routed_cells()` reads ``NEXTPNR_BEL`` and the cell parameters,
+  `sliceprog.py` synthesises one program per used slice (reset/CE included), and
+  `build.program_slice_comps()` evaluates the BFD slice equations against it.
+* **LUT INIT.**  Written from the routed LUT ``INIT`` parameter for both banks
+  of every instantiated slice; entirely uninstantiated slices are left alone
+  (the vendor leaves them at 0).
+* **Not written.**  PIO configuration (needs the IOBUF properties the converter
+  does not carry yet) and the uncalibrated spine/pad contexts, which keep the
+  template value and are reported by the CLI.
+
+Two encoder bugs surfaced while validating this path:
+
+* `_is_config_fuse()` treated a fuse with no expression as config, and the PLC
+  profile (`SL2-12E_bfd_PLC.json`) carries no `fuse_exprs` at all, so **every**
+  PLC routing fuse was skipped.  The earlier 18-design replay used each design's
+  own vendor bitstream as the template, which hid this completely.  Missing
+  expressions now mean "plain arc mux".
+* `_fuse_arcs()` has to alias-normalise both ends (``HPBX0100`` ->
+  ``HPBX0100B``), otherwise arcs compared against aliased `used` sets never
+  match.
+
+Validation uses the vendor bitstream of an **empty** design as the template, so
+anything the writer fails to emit shows up as residual.  Replaying
+`counter.xpn` (DFF + synchronous reset + CE) through `write_bitstream()` with
+`pips`/`cells` and comparing with the vendor `counter` bitstream:
+
+```
+total residual      51 bits
+PLC rows (29..1073)  8 bits, all in the edge columns 1/49 (PIO FIBMEM config)
+interior PLC tiles   0 bits (tile columns 2..48)
+```
+
+The 8 edge bits are `config(PIO_...)` FIBMEM fuses, i.e. the missing PIO path,
+not routing/slice logic.  `tests/test_xist_bitgen.py` asserts the interior PLC
+result, the CE/LSR mux fuses, `REGSET=RESET`, `LSRONMUX` and `SRMODE`, and an
+end-to-end run of a design with async reset + CE through nextpnr.
 
 ### PIO configuration model
 
