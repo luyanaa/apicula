@@ -203,6 +203,7 @@ def main(argv=None) -> int:
     bs = Bitstream.read(args.base)
     pips = pips_from_xpn(args.xpn)
     n = program(bs, pips, load_fusemap(args.map))
+    bs.update_checksum()
     bs.write(args.out)
     print(f"programmed {n} fuses -> {args.out}")
     return 0

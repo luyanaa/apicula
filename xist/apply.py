@@ -110,6 +110,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     bs = Bitstream.read(args.base)
     n = apply_pio(bs, args.xpn, args.pio)
+    bs.update_checksum()
     if args.out:
         bs.write(args.out)
     print(f"programmed {n} PIO configuration bits")

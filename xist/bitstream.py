@@ -2,8 +2,9 @@
 
 The vendor .bit format (HqFpga-XIST V3.1.0, SEALION SL2-12E) is a text header
 followed by a ``Rows x Cols`` bitmap, one ASCII character per configuration bit,
-row major.  The last bitmap line carries 16 extra characters (checksum, algorithm
-not yet identified).  See ``doc/xist.md`` for the evidence.
+row major.  The last bitmap line carries a 16-bit trailer:
+``CRC-16/0x8005`` (non-reflected, init 0) over the bit-packed bitmap XOR
+``0x1FE2``.  See ``doc/xist.md`` for the evidence.
 """
 
 from __future__ import annotations
@@ -23,6 +24,19 @@ LUT_SLOT_ROW_OFFSETS = {
 # minterm j (0..7) -> column offset inside the 8-column block.
 # For slice A.  Other slices have their own permutation; calibrate per device.
 PERM_SLICE_A = (0, 1, 3, 2, 4, 5, 7, 6)
+
+
+def _make_crc8005_table() -> list[int]:
+    table = []
+    for i in range(256):
+        c = i << 8
+        for _ in range(8):
+            c = ((c << 1) ^ 0x8005) & 0xFFFF if c & 0x8000 else (c << 1) & 0xFFFF
+        table.append(c)
+    return table
+
+
+_CRC8005_TABLE = _make_crc8005_table()
 
 
 @dataclass
@@ -104,6 +118,37 @@ class Bitstream:
                 f.write("\n")
             for line in self.footer_block:
                 f.write(line + "\n")
+
+    def packed_bytes(self) -> bytes:
+        """Bit-packed configuration data (MSB first), all rows, no trailer."""
+        out = bytearray()
+        for row in self.rows:
+            n = len(row)
+            for i in range(0, n, 8):
+                v = 0
+                for ch in row[i:i + 8]:
+                    v = (v << 1) | (1 if ch == "1" else 0)
+                out.append(v)
+        return bytes(out)
+
+    @staticmethod
+    def crc16(data: bytes, init: int = 0) -> int:
+        """CRC-16, polynomial 0x8005, non-reflected (MSB first)."""
+        table = _CRC8005_TABLE
+        crc = init
+        for b in data:
+            crc = ((crc << 8) & 0xFFFF) ^ table[((crc >> 8) ^ b) & 0xFF]
+        return crc
+
+    def checksum(self) -> int:
+        """The 16-bit trailer: CRC-16/0x8005 of the packed bitmap XOR 0x1FE2."""
+        return self.crc16(self.packed_bytes()) ^ 0x1FE2
+
+    def verify_checksum(self) -> bool:
+        return self.extra16 == format(self.checksum(), "016b")
+
+    def update_checksum(self) -> None:
+        self.extra16 = format(self.checksum(), "016b")
 
     def to_bytes(self) -> bytes:
         import io

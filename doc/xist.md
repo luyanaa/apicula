@@ -25,7 +25,7 @@ the device/bitstream/fuzz side; the C++ uarch comes next.
 | `xist/bbasm.py` | **verified**: Python bbasm; produced a valid chipdb blob (magic/version/width/height checked) |
 | routing graph | **bring-up**: complete CIB + long-wire mesh; arbitrary designs route |
 | pip -> fuse map | **complete for CIB/long-wire**: vendor BFD data, 3315 arcs / 1976 long-wire across 56 routing tile types in 28 profiles (`SL2-12E_bfd_profiles.json`); validated on 305 PLC + 331 edge-tile bitstream instances |
-| bitstream checksum / `.bin` compression | **unknown** |
+| bitstream checksum | **decoded**: CRC-16/0x8005 over packed bits XOR 0x1FE2 |
 | timing model | **unknown** (vendor STA is internal) |
 | `nextpnr` uarch (`xist.cc`, packer, writer) | **route verified** for arbitrary LUT/DFF/ALU/MUX/IO designs on the bring-up graph; vendor fuse map / bitstream TODO |
 
@@ -473,6 +473,28 @@ top    row base 1108 (rows 1108..1113)
 bottom row base 1102 (rows 1102..1107)
 column delta: T/B column 7 -> -2, T/B column 45 -> -1, otherwise 0
 ```
+
+### Bitstream checksum
+
+The 16 characters appended to the last bitmap row are a CRC-16 of the
+bit-packed configuration:
+
+```
+poly    0x8005 (non-reflected, MSB first)
+init    0
+data    1125 x 2376 bits, 8 bits per byte, MSB first, all rows (incl. zero last row)
+xorout  0x1FE2
+write   16 '0'/'1' characters (MSB first)
+```
+
+The polynomial was derived from single-bit probes: clearing `CLAMP` on a PAD
+flips exactly one bitmap bit, and the resulting checksum deltas for adjacent
+columns satisfy the 0x8005 shift recurrence (`0xFD6C -> 0x7ADD -> 0xF5BA ->
+0x6B71`).  Verification: 371/372 vendor bitstreams match; the one exception is
+`h0_from_h1.bit`, a file patched earlier without recomputing the trailer.
+
+`Bitstream.checksum()/verify_checksum()/update_checksum()` implement it, and
+`xist.apply` / `xist.program` recompute the trailer after writing.
 
 ### Applying PIO configuration
 

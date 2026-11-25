@@ -97,7 +97,9 @@ The uarch's bitstream writer will load these when emitting `.bit`.
   (`--check` compares with a vendor bitstream; c0: 863/863 bits).
   Remaining: the `-12k` corners are CENTER/CFG/DSP spine tiles carrying
   long-wire routing, not PIO; their 2-column bit mapping is uncalibrated.
-* `.bit` checksum and `.bin` compression.
+* `.bit` checksum: **decoded** (CRC-16/0x8005 over bit-packed rows XOR
+  0x1FE2; verified on 371 vendor bitstreams).  `.bin` compression is still
+  unknown.
 * Timing model.
 * Real packer (LUT/DFF pairing, constants, IO attributes); the bring-up uarch
   only removes nextpnr's synthetic IOBs.
