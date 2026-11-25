@@ -89,10 +89,23 @@ def used_arcs(path: str | Path, tile_row: int, tile_col: int,
     used = set()
     for sig in parse_xpn(path).values():
         for src, dst in sig.route:
-            if src.startswith(prefix) and dst.startswith(prefix):
-                a = wire_local(dst)
-                b = wire_local(src)
+            s_in = src.startswith(prefix)
+            d_in = dst.startswith(prefix)
+            if u_in := (s_in or d_in):
+                pass
+            if not u_in:
+                continue
+            # A long-wire hop is written as a cross-tile pair, e.g.
+            # R2C19_H06E0200.R5C19_H06E0206: the local wires of both ends are
+            # active in their own tiles, so keep the endpoint that is local.
+            a = wire_local(dst) if d_in else None
+            b = wire_local(src) if s_in else None
+            if a is not None and b is not None:
                 used.add((alias.get(a, a), alias.get(b, b)))
+            elif a is not None:
+                used.add((alias.get(a, a), a))
+            elif b is not None:
+                used.add((b, alias.get(b, b)))
     return used
 
 

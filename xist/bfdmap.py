@@ -24,6 +24,7 @@ that is inferred rather than measured.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -91,6 +92,26 @@ def arc_bits(tile: BfdTile, cal: Calibration, tile_row: int, tile_col: int
     return out
 
 
+_LUT_RE = re.compile(r"memory\(\s*(SLICE_[ABCD])\s*,\s*(\d)\s*,\s*(\d+)\s*\)")
+
+
+def _lut_init_table(tile: BfdTile) -> dict[str, dict[str, list]]:
+    """``{site: {bank: [[row, col] x16]}}`` from the BFD ``memory()`` fuses."""
+    out: dict[str, dict[str, list]] = {}
+    for name, expr in tile.equations.items():
+        m = _LUT_RE.search(expr)
+        if not m:
+            continue
+        site, bank, idx = m.group(1), int(m.group(2)), int(m.group(3))
+        pos = tile.fuse_positions(name)
+        if not pos:
+            continue
+        bank_map = out.setdefault(site, {}).setdefault(bank, [None] * 16)
+        if idx < 16:
+            bank_map[idx] = list(pos[0])
+    return out
+
+
 def export(tile: BfdTile, cal: Calibration, out: Path) -> dict:
     """Write a compact, regeneration-friendly routing fuse table."""
     fuses: dict[str, list[list[int]]] = {}
@@ -120,6 +141,8 @@ def export(tile: BfdTile, cal: Calibration, out: Path) -> dict:
         "fuses": fuses,
         "arc_fuses": arcs,
         "special_fuses": tile.special_fuses(),
+        # LUT INIT: memory(SLICE_x, bank, minterm) fuses, natural order
+        "lut_init": _lut_init_table(tile),
     }
     Path(out).write_text(json.dumps(data, indent=1) + "\n")
     return data

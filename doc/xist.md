@@ -437,6 +437,67 @@ routing export does not model.
 
 The raw measurements are in `testdata/SL2-12E_pio_probe.json`.
 
+### LUT INIT and slice configuration
+
+Two more configuration regions are decoded from the same BFD dump.
+
+**Slice control (DFF/ALU/LUT control)**: `xist/sliceconfig.py` parses the XPN
+slice program (`MODE:LOGIC`, `K0::H0=(A*B)`, `REG0:::REGSET=RESET,CLKDELAY=DEL0:SD=1`,
+`CLKMUX:CLK:::0=0,CLK=#SIG`, `CEMUX`, `LSRMUX`, `SRMODE`, `REGMODE`, `GSR`) and
+evaluates the PLC `XPFU` configuration equations.  Only slices instantiated in
+the tile are driven.  Validated read-only on the routed corpus:
+
+```
+370 tile groups, 27010 / 27010 slice configuration bits (100.000%)
+```
+
+**LUT INIT**: the BFD encodes the truth-table fuses as
+``memory(SLICE_D, bank, minterm)``, which gives both the position and the
+minterm index directly - no probe campaign needed:
+
+```
+XPFU_SR/XXPFU_SLICE_SR_3/XXLOGICMUX16_0/XXLUT0/Q0 = (comp(SLICE_D) && !memory(SLICE_D,0,0))
+```
+
+`xist/bfdmap._lut_init_table` exports these as
+``lut_init[site][bank][minterm] = (ram_row, ram_col)`` in
+`testdata/SL2-12E_bfd_PLC.json`.  Bank 0 is K0/H0, bank 1 is K1/H1, and the
+minterm index uses the natural variable order (A=bit0).  The XPN carries the
+function itself (`K0::H0=(D*(A*B))`), so `xist/lutinit.py` evaluates it and
+writes the complemented fuses.  Validated on the routed corpus:
+
+```
+698 slice instances, 21664 / 21664 LUT INIT bits (100.000%)
+```
+
+### .bit assembly
+
+`xist/build.py` overlays everything that is decoded onto a template `.bit`:
+
+```bash
+python -m xist.build --base template.bit --xpn design.xpn --out design.bit
+```
+
+It walks every tile in the device grid, picks the contextual BFD profile
+(`PLC`, `CIB_CFG`, `CIB_EBR`, `CIB_DSP`, the 59-column edge profiles), programs
+the routing muxes and LUT INIT, writes the slice configuration, applies the PIO
+configuration, and finally recomputes the checksum.
+
+Running it with a vendor bitstream as both template and source is a strong
+check: every bit it writes must already be correct.  On 60 routed designs the
+difference from the vendor bitstream is:
+
+```
+total residual 1421 of 160380000 bits = 0.000886%
+per design: best 16, worst 64, mean 23.7
+```
+
+The residual is concentrated in three places, all of them still synthetic:
+the 59-column spine tiles (`CENTER*_12K`, whose 2-column bit mapping is not
+calibrated), `CTEST_CFG`/`CTEST_EBR` (a row-1/38 profile subset), and a handful
+of same-track long-wire aliases.  Routing, slice configuration, LUT INIT, PIO
+configuration and the checksum are bit-exact.
+
 ### PIO configuration model
 
 The probe bits are not routing arcs; they are `property()`/`config()` rules in
