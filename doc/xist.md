@@ -577,6 +577,49 @@ tiles whose values the current PIO model does not reproduce - pull/bank
 dependent rules rather than routing.  Routing, slice configuration, LUT INIT and
 the checksum are bit-exact; PLC tiles are fully exact.
 
+### Slice legality and DFF semantics
+
+The bring-up uarch returned ``true`` from ``isBelLocationValid()`` for every bel,
+so the placer could build slices the silicon cannot implement.  The constraints
+are not guessed: the BFD states the slice's configuration fields, so
+`xist/slicelegal.py` reads them from `testdata/SL2-12E_bfd_slice.json`:
+
+```
+config fields   MODE REGMODE SRMODE REG0.SD REG1.SD CLKMUX.CLK CLKMUX.0
+                CEMUX.CE CEMUX.1 LSRMUX.LSR LSRMUX.0 LSRONMUX GSR
+                WCKMUX.* WREMUX.*
+property fields REG0.REGSET REG1.REGSET CCU2.INJECT1_0 CCU2.INJECT1_1
+```
+
+Each bank owns one ``REG<n>.*`` set plus the shared slice fields, which gives
+these rules:
+
+* a DFF needs its bank LUT (or the carry chain) as data source - ``DI`` is
+  driven only by the slice output mux ``OFX``, so routing cannot reach it;
+* ``REG0``/``REG1`` hold a single ``REGSET``, so reset and set cannot both be
+  requested;
+* ``RAMW``/``DPRAM`` banks are memory, not gates, and cannot also hold a DFF;
+* ``RIPPLE``/``CCU2`` banks belong to the carry chain and need the LUT for
+  propagate/generate.
+
+`xist.cc` implements the first rule in ``isBelLocationValid()``.  It is a real
+check, not a stub: a bare DFF is now rejected at placement time instead of
+producing a bitstream that cannot work.
+
+```
+$ python -m xist.demo_any dff.v        # reg r <= d, no logic
+ERROR: Unable to find legal placement for cell 'r_DFF_Q' of type 'DFF'
+```
+
+`xist/nextpnr_json.py` also preserves DFF semantics instead of dropping them:
+reset/set/clock-enable and polarity become cell parameters (``RESET``,
+``RESET_POLARITY``, ``SET``, ``CE``, ``CLK_POLARITY``) mirroring the vendor slice
+program, and ``VCC``/``GND`` cells are kept rather than skipped.
+
+Still open: this nextpnr revision has no cluster API, so the uarch cannot force
+a DFF next to its LUT.  Legality is enforced, pairing is not - a real packer is
+required for DFF-heavy designs.
+
 ### PIO configuration model
 
 The probe bits are not routing arcs; they are `property()`/`config()` rules in

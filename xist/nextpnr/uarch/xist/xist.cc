@@ -58,13 +58,35 @@ struct XistImpl : HimbaechelAPI
                 CellTypePort(id_PIO, id_PAD),
         };
         h.remove_nextpnr_iobs(top_ports);
-        // Constants and LUT/DFF pairing are TODO.
     }
 
     bool isBelLocationValid(BelId bel, bool explain_invalid) const override
     {
-        (void)bel;
-        (void)explain_invalid;
+        IdString bel_type = ctx->getBelType(bel);
+        if (bel_type != id_DFF)
+            return true;
+
+        {
+            // The DFF data input is the slice output mux (OFX -> DI), which is
+            // fed by the same bank's LUT (or the carry chain).  Routing cannot
+            // reach DI directly, so a DFF with no used LUT in its bank is not
+            // implementable.
+            auto bel_name = ctx->getBelName(bel);
+            const std::string name = bel_name[1].str(ctx);
+            if (!name.empty() && isdigit(name.back())) {
+                const int bank = name.back() - '0';
+                const auto lut = ctx->getBelByName(
+                        IdStringList::concat(bel_name[0], ctx->idf("LUT%d", bank)));
+                if (lut != BelId() && ctx->checkBelAvail(lut)) {
+                    if (explain_invalid)
+                        log_error("DFF %s needs LUT%d in the same slice bank: its "
+                                  "D input is the slice output mux (OFX->DI), which "
+                                  "routing cannot drive.\n",
+                                  ctx->getBelName(bel).str(ctx).c_str(), bank);
+                    return false;
+                }
+            }
+        }
         return true;
     }
 

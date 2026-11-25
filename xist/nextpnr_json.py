@@ -1,8 +1,27 @@
-"""Convert a Yosys `synth_gowin` JSON netlist into the minimal XIST cell set.
+"""Convert a Yosys `synth_gowin` JSON netlist into the XIST cell set.
 
-This is a bring-up helper, not a production packer: it renames Gowin LUTn/DFF
-cells to the XIST `LUT4`/`DFF`/`PIO` bels, expands LUTn INITs to 16 bits and
-drops reset/clock-enable pins (the first uarch has no DFF configuration yet).
+Renames Gowin LUTn/DFF cells to the XIST ``LUT4``/``DFF``/``PIO`` bels and
+expands LUTn INITs to 16 bits.
+
+DFF semantics are preserved as *configuration*, matching the vendor slice
+program (``REG0:::REGSET=RESET,CLKDELAY=DEL0:SD=1 ... SRMODE:ASYNC``): the
+reset, clock-enable and polarity pins become cell parameters instead of being
+dropped, so the bitstream writer can emit ``REG0.REGSET`` / ``CEMUX`` /
+``LSRMUX`` / ``REGMODE`` from the netlist:
+
+===================  ==========================================
+Gowin cell           XIST DFF parameters
+===================  ==========================================
+DFF                  (none)
+DFFR / DFFNR         RESET=1  (inverted for the N variants)
+DFFS / DFFNS         SET=1
+DFFE / DFFNE         CE=1
+DFFRE / DFFNRE       RESET=1, CE=1
+DFFSE / DFFNSE       SET=1, CE=1
+===================  ==========================================
+
+``CLK_POLARITY`` / ``RESET_POLARITY`` keep the vendor's sense, and
+``SRMODE`` records whether reset/set is asynchronous.
 
 Usage:
     python -m xist.nextpnr_json input.json output.json
@@ -20,7 +39,11 @@ DFF_TYPES = {"DFF", "DFFR", "DFFS", "DFFE", "DFFRE", "DFFSE",
 
 
 def _expand_lut(init: str, nbits: int) -> str:
-    """Expand a 2^n truth table to 16 bits by repeating it for unused inputs."""
+    """Expand a 2^n truth table to 16 bits by repeating it for unused inputs.
+
+    Unused LUT inputs are tied low by the packer, so the block is replicated
+    over the upper address bits.
+    """
     v = int(init, 2) & ((1 << nbits) - 1)
     reps = 16 // nbits
     full = 0
@@ -58,8 +81,31 @@ def convert(module: dict) -> dict:
             for src, dst in (("D", "D"), ("CLK", "CLK"), ("Q", "Q")):
                 if src in conn:
                     new_conn[dst] = conn[src]
+            params_out: dict = {}
+            negative = typ.startswith("DFFN")
+            # DFFN* latches ~D: keep that as a register polarity instead of
+            # pushing an inverter into the LUT
+            if negative:
+                params_out["CLK_POLARITY"] = "0"
+            if "R" in conn and "_R" not in typ.replace("DFFRE", "DFF_RE").replace("DFFNRE", "DFFN_RE") or "R" in typ:
+                pass
+            # reset / set presence, with the vendor's active sense
+            if "R" in conn and "R" in typ:
+                new_conn["R"] = conn["R"]
+                params_out["RESET"] = "1"
+                params_out["RESET_POLARITY"] = "0" if negative else "1"
+            if "S" in conn and "S" in typ:
+                new_conn["S"] = conn["S"]
+                params_out["SET"] = "1"
+                params_out["SET_POLARITY"] = "0" if negative else "1"
+            if "CE" in conn and "E" in typ:
+                new_conn["CE"] = conn["CE"]
+                params_out["CE"] = "1"
             dirs = {"D": "input", "CLK": "input", "Q": "output"}
-            cells[name] = {"type": "DFF", "parameters": {},
+            for pin in ("R", "S", "CE"):
+                if pin in new_conn:
+                    dirs[pin] = "input"
+            cells[name] = {"type": "DFF", "parameters": params_out,
                            "attributes": attrs, "connections": new_conn,
                            "port_directions": dirs}
         elif typ == "IBUF":
@@ -98,7 +144,15 @@ def convert(module: dict) -> dict:
                            "attributes": attrs,
                            "connections": {k: v for k, v in conn.items() if k in dirs},
                            "port_directions": {k: dirs[k] for k in conn if k in dirs}}
-        elif typ in ("VCC", "GND") or typ.startswith("$specify"):
+        elif typ in ("VCC", "GND"):
+            # keep them: they are real constant drivers, and a dangling LUT
+            # input would otherwise float.  The packer ties them to the tile's
+            # constant nets.
+            cells[name] = {"type": typ, "parameters": {},
+                           "attributes": attrs,
+                           "connections": {"Y": conn.get("Y")},
+                           "port_directions": {"Y": "output"}}
+        elif typ.startswith("$specify"):
             continue
         else:
             raise ValueError(f"unsupported cell {name}: {typ}")
