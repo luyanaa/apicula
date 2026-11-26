@@ -102,8 +102,9 @@ def apply_pio_comps(bs: Bitstream, comps, pio_json: str | Path = PIO_FILE,
         else:
             if pos not in cal.column_base:
                 continue
-            delta = data["column_delta"].get(side, {}).get(str(pos), 0)
-            base = cal.column_base[pos] + delta
+            # cal.column_base already contains the top/bottom shift; adding
+            # column_delta on top of it moves T/B pads two columns off
+            base = cal.column_base[pos]
             rbase = data["row_base"][side]
             tile_row = pos
         side_eqs = list(eqs[side])
@@ -134,8 +135,7 @@ def _positions(xpn_path: str | Path, pio_json: str | Path = PIO_FILE,
         else:
             if pos not in cal.column_base:
                 continue
-            delta = data["column_delta"].get(side, {}).get(str(pos), 0)
-            base, rbase, tile_row = cal.column_base[pos] + delta, data["row_base"][side], pos
+            base, rbase, tile_row = cal.column_base[pos], data["row_base"][side], pos
         out.extend(bits_from_equations(eqs[side], cs, tile_row, base, rbase))
     return out
 
