@@ -43,6 +43,7 @@ from .chipdb import _context_name, default_bfd_profiles
 from .device import parse_udev_report
 from .sliceprog import SliceFacts, slice_program
 from .piogen import iologic_comps, pio_comps
+from .spine import design_shape, spine_bits
 from .xpn import Comp
 
 _XY = re.compile(r"X(\d+)Y(\d+)")
@@ -143,6 +144,7 @@ def write_bitstream(base: str | Path, out: str | Path, *,
                     pips: dict | None = None,
                     cells: dict | None = None,
                     all_tiles: list[tuple[int, int]] | None = None,
+                    shape: tuple[bool, bool] | None = None,
                     verbose: bool = True) -> dict:
     """Assemble a .bit from routed data.
 
@@ -207,6 +209,17 @@ def write_bitstream(base: str | Path, out: str | Path, *,
             nbits += program_plc_rows(bs, None, prof, cal, row, col,
                                       base_row,
                                       used=pips.get((row, col), set()))
+
+    # spine clock-network enables: derivable from the design shape only.
+    # ``shape`` may be given explicitly for the pips/cells path; otherwise it
+    # comes from the routed JSON.
+    if shape is None and routed is not None:
+        shape = design_shape(routed)
+    if shape is not None:
+        for (br, bc), val in spine_bits(*shape).items():
+            if 0 <= br < bs.nrows and 0 <= bc < bs.ncols:
+                _set(bs, br, bc, val)
+                nbits += 1
 
     pio_list = pio_comps(routed) if routed is not None else []
     pio_list += iologic_comps(routed) if routed is not None else []

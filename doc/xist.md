@@ -726,10 +726,10 @@ Still open:
   ``synth_gowin -noalu`` so adders become LUT logic.
 * ``SD=0`` (data from the routed ``M`` input) is not in the chipdb: the placer
   cannot route to ``M``, so the packer inserts an identity LUT instead.
-* The spine clock tiles (`CENTER6_12K`, `CENTER7_12K`, `CFG*`, the `*_12k`
-  tokens) carry `XI0/XFUSE_BOX` clock-network fuses that are not calibrated;
-  they keep the template value.  This is what the last 4-5 residual bits of a
-  full replay belong to (see "What the bit column 0/50 gap actually is").
+* The spine clock tiles (`CENTER6_12K`, ...) carry `SNET_*` muxes.  The two that
+  only say "a clock network is live" are written from the design shape
+  (`xist/spine.py`); the rest depend on the tile-local spine track that a routed
+  JSON does not carry (see "Spine clock enables").
 * IOLOGIC output registers, input registers and DDR (ODDR/ODDR2/IDDRX1) all
   have bels, packing and program synthesis; their pad configuration is
   bit-exact against vendor oracles.  Not modelled: the ODDRX4/ODDRX7 and
@@ -975,6 +975,38 @@ network (`arcval(SNETCIBT_n, SNET_n)`, `arcval(PCLKT3_0, PCLK_1)`, ...).  So the
 remaining gap is the **uncalibrated spine/spine-clock contexts**, not the pad
 column.  Those tiles are 2 columns wide and their bit mapping is not calibrated,
 which is the same item already listed under "still open" above.
+
+### Spine clock enables
+
+The 2-column spine tile types (`CENTER6_12K` ... `CENTERA_12K`) hold the device
+clock tree; their fuses are pure `arcval(source, SNET_n)` muxes and `SNET_*`
+never appears in an XPN, so `used_arcs()` cannot derive them.  Measuring five
+vendor bitstreams gives the meaning of every spine bit that is ever set:
+
+```
+bit          counter oreg ireg oddr empty   meaning
+(517,1)         1     1    1    1    0      a clock network is live
+(514,1)         1     1    1    1    0      a clock network is live
+(225,1)         0     0    1    1    0      the data pad uses IOLOGIC
+(689,1)         1     0    0    0    0      depends on the SNET mux reached
+(892,1)         1     1    0    0    0      depends on the SNET mux reached
+```
+
+The first two are decidable from the design shape, so `xist/spine.py` writes
+them (`design_shape()` + `spine_bits()`): any sequential cell means the clock
+tree is live.  The spine column bases are 2 (column 0) and 2374 (column 50),
+symmetrically.
+
+Replaying `counter.xpn` onto an empty image now leaves 3 bits instead of 5:
+
+```
+(689,1) (892,1)   SNET muxes, not derivable from a routed netlist
+(1107,2033)       bottom pad block
+```
+
+The 225 bit is *not* written because it tracks "the pad's data path goes through
+IOLOGIC", which only the pads' own programs know; it stays at the template value
+like the two SNET muxes.
 
 ### PIO configuration model
 

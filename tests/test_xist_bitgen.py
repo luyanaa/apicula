@@ -478,6 +478,41 @@ def test_ddr_output_flows_through_the_flow(tmp_path):
     assert any("DATAMUX:IOLDO" in p for p in pads.values()), pads
 
 
+def test_spine_clock_enables_written(tmp_path):
+    """The derivable spine clock-tree bits follow the design shape."""
+    from xist.spine import design_shape, spine_bits
+
+    # an ordinary clocked design: both enables must be set
+    routed = {"modules": {"m": {
+        "attributes": {"top": "00000000000000000000000000000001"},
+        "netnames": {},
+        "cells": {
+            "d": {"type": "DFF", "connections": {"CLK": 1, "D": 2, "Q": 3},
+                  "parameters": {}, "attributes": {}},
+            "i": {"type": "PIO", "connections": {"PAD": 4, "PADDI": 5},
+                  "parameters": {}, "attributes": {}},
+        }}}}
+    shape = design_shape(routed)
+    assert shape == (True, True)
+    assert spine_bits(*shape) == {(517, 1): True, (514, 1): True}
+
+    out = tmp_path / "spine.bit"
+    write_bitstream(EMPTY_BIT, out, routed=routed, verbose=False)
+    bs = Bitstream.read(str(out))
+    assert bs.rows[517][1] == "1" and bs.rows[514][1] == "1"
+
+    # a purely combinational design: neither
+    routed["modules"]["m"]["cells"] = {
+        "l": {"type": "LUT4", "connections": {"F": 3},
+              "parameters": {"INIT": "1000100010001000"}, "attributes": {}}}
+    shape = design_shape(routed)
+    assert shape == (False, False)
+    out2 = tmp_path / "spine2.bit"
+    write_bitstream(EMPTY_BIT, out2, routed=routed, verbose=False)
+    bs2 = Bitstream.read(str(out2))
+    assert bs2.rows[517][1] == "0" and bs2.rows[514][1] == "0"
+
+
 def test_counter_control_fuses_set(counter_replay_bit):
     """Reset/CE produce the expected slice and routing fuses."""
     ours = Bitstream.read(str(counter_replay_bit))
