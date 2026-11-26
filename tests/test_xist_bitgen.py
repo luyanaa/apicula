@@ -442,6 +442,42 @@ def test_sync_and_async_reset_produce_different_srmode(tmp_path):
     assert results == {"sync": "0", "async": "1"}, results
 
 
+@pytest.mark.skipif(shutil.which("yosys") is None or not NEXTPNR.exists(),
+                    reason="needs yosys and a built nextpnr-himbaechel")
+def test_ddr_output_flows_through_the_flow(tmp_path):
+    """xsODDR: converter -> packer -> placer -> writer, end to end."""
+    src = tmp_path / "ddr.v"
+    src.write_text(
+        "module top(input clk, input d0, input d1, output q);\n"
+        "  xsODDR oddr(.D0(d0), .D1(d1), .RST(1'b0), .SCLK(clk), .Q(q));\n"
+        "endmodule\n")
+    from xist.demo_any import main as demo
+
+    assert demo([str(src), "--bfd-replace", "--workdir", str(tmp_path / "w"),
+                 "--nextpnr", str(NEXTPNR)]) == 0
+    routed = json.loads((tmp_path / "w" / "routed.json").read_text())
+    cells = list(routed["modules"].values())[0]["cells"]
+
+    ddr = [c for c in cells.values() if c["type"] == "ODDR"]
+    assert len(ddr) == 1
+    # packed into the pad's ODDR bel, not left floating
+    assert "PAD_DDR" in ddr[0]["parameters"]
+    assert "/IOLOD" in ddr[0]["attributes"]["NEXTPNR_BEL"]
+
+    out = tmp_path / "ddr.bit"
+    res = write_bitstream(EMPTY_BIT, out, routed=routed, verbose=False)
+    assert res["pio"] > 0 and res["checksum"]
+
+    # the pad must take its data from the IOLOGIC, and the IOLOGIC must be
+    # programmed for DDR (measured: IDDR_ODDR selects DATAMUX:IOLDO)
+    from xist.piogen import iologic_comps, pio_comps
+
+    iol = {c.site: c.program for c in iologic_comps(routed)}
+    assert any("MODE:IDDR_ODDR" in p for p in iol.values()), iol
+    pads = {c.site: c.program for c in pio_comps(routed)}
+    assert any("DATAMUX:IOLDO" in p for p in pads.values()), pads
+
+
 def test_counter_control_fuses_set(counter_replay_bit):
     """Reset/CE produce the expected slice and routing fuses."""
     ours = Bitstream.read(str(counter_replay_bit))

@@ -49,6 +49,10 @@ DFF_RESET = DFF_RESET_SYNC | DFF_RESET_ASYNC
 DFF_SET = DFF_SET_SYNC | DFF_SET_ASYNC
 DFF_CE = {"DFFE", "DFFRE", "DFFSE", "DFFNE", "DFFNRE", "DFFNSE",
           "DFFCE", "DFFNCE", "DFFPE", "DFFNPE"}
+# XiST IOLOGIC DDR primitives (vendor names, see testdata/SL2-12E_xs_prims.v)
+DDR_OUT_TYPES = {"xsODDR": ("D0", "D1", "Q"),
+                 "xsODDRX2": ("D0", "D1", "D2", "D3", "Q")}
+DDR_IN_TYPES = {"xsIDDRX1": ("D", "Q0", "Q1")}
 
 
 def _expand_lut(init: str, nbits: int) -> str:
@@ -132,6 +136,47 @@ def convert(module: dict) -> dict:
             cells[name] = {"type": "PIO", "parameters": {}, "attributes": attrs,
                            "connections": {"PADDO": conn["I"], "PAD": conn["O"]},
                            "port_directions": {"PADDO": "input", "PAD": "output"}}
+        elif typ in DDR_OUT_TYPES:
+            # A DDR output reads two/four data nets and drives one pad-visible
+            # net; the cell is moved into the pad's IOLOGIC block at pack time.
+            ports = DDR_OUT_TYPES[typ]
+            new_conn = {p: conn[p] for p in (*ports, "SCLK", "RST", "ECLK")
+                        if p in conn}
+            if "SCLK" in new_conn:      # the bel pin is CLK, like a DFF
+                new_conn["CLK"] = new_conn.pop("SCLK")
+            params_out = {"DDR_MODE": typ}
+            if "GSR" in params:
+                params_out["GSR"] = params["GSR"]
+            dirs = {p: "input" for p in new_conn if p != "Q"}
+            dirs["Q"] = "output"
+            cells[name] = {"type": "ODDR", "parameters": params_out,
+                           "attributes": attrs, "connections": new_conn,
+                           "port_directions": dirs}
+        elif typ in DDR_IN_TYPES:
+            ports = DDR_IN_TYPES[typ]
+            new_conn = {p: conn[p] for p in (*ports, "SCLK", "RST")
+                        if p in conn}
+            if "SCLK" in new_conn:
+                new_conn["CLK"] = new_conn.pop("SCLK")
+            params_out = {"DDR_MODE": typ}
+            if "GSR" in params:
+                params_out["GSR"] = params["GSR"]
+            dirs = {p: "input" for p in new_conn if p != "Q0"
+                    and p != "Q1"}
+            for p in ("Q0", "Q1"):
+                if p in new_conn:
+                    dirs[p] = "output"
+            cells[name] = {"type": "IDDR", "parameters": params_out,
+                           "attributes": attrs, "connections": new_conn,
+                           "port_directions": dirs}
+        elif typ == "xsIODLY":
+            # a delay line on a pad net: keep it transparent, the delay
+            # parameters are not modelled
+            cells[name] = {"type": "LUT4",
+                           "parameters": {"INIT": "1010101010101010"},
+                           "attributes": attrs,
+                           "connections": {"I[0]": conn["A"], "F": conn["Z"]},
+                           "port_directions": {"I[0]": "input", "F": "output"}}
         elif typ in ("MUX2_LUT5", "MUX2_LUT6", "MUX2_LUT7", "MUX2_LUT8"):
             # O = S0 ? I1 : I0  ->  LUT4 with I[0]=I0, I[1]=I1, I[2]=S0
             init = 0

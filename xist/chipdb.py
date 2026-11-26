@@ -143,7 +143,7 @@ def _add_io_tile_type(chip: Chip, name: str, n_io: int = 4) -> None:
                   f"JPADDO{slot}", f"PADDO{slot}_PIO", f"OE_{slot}",
                   f"IOLDO{slot}", f"JOPOS{slot}", f"JIN{slot}",
                   f"JCLK{slot}", f"JCE{slot}", f"JLSR{slot}",
-                  f"JIPA{slot}", f"JONEG{slot}"):
+                  f"JIPA{slot}", f"JONEG{slot}", f"JQ1{slot}", f"JQ2{slot}"):
             tt.create_wire(w)
         b = tt.create_bel(f"PIO_{slot}", "PIO", s)
         tt.add_bel_pin(b, "PAD", f"PAD_{slot}", PinType.INOUT)
@@ -440,7 +440,11 @@ def _wire_pad_iologic(chip: Chip, report: DeviceReport,
         pairs += [(f"JOPOS{slot}", f"A{i}"), (f"JIN{slot}", f"F{i}"),
                   (f"JCLK{slot}", f"CLK{i}"), (f"JLSR{slot}", f"LSR{i}"),
                   (f"JCE{slot}", f"CE{i}"), (f"JIPA{slot}", f"F{i}"),
-                  (f"JONEG{slot}", f"A{i}")]
+                  # measured: the ODDR's second data input comes from the
+                  # CIB's B side (``JB0 -> JONEGA`` in the vendor DDR XPN)
+                  (f"JONEG{slot}", f"B{i}"),
+                  # the pad data reaches the fabric through these CIB sinks
+                  (f"JQ1{slot}", f"Q1"), (f"JQ2{slot}", f"Q2")]
     for (r, c), (r2, c2) in adj.items():
         if not (0 <= r2 < rows and 0 <= c2 < cols):
             continue

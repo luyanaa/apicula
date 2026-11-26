@@ -50,9 +50,11 @@ def main(argv=None) -> int:
 
     # 1. Yosys generic LUT/DFF netlist
     # -noalu: the ALU slice mode has no bitstream model yet, so adders are
-    # synthesised as LUT logic instead of ALU cells.
+    # synthesised as LUT logic instead of ALU cells.  The IOLOGIC DDR
+    # primitives (xsODDR/...) are declared as blackboxes next to the design.
+    prims = TESTDATA / "SL2-12E_xs_prims.v"
     r = run(["yosys", "-q", "-p",
-             f"read_verilog {args.verilog}; "
+             f"read_verilog {prims}; read_verilog {args.verilog}; "
              f"synth_gowin -noalu -json {wd / 'design.json'}"])
     if r.returncode:
         print(r.stderr)
