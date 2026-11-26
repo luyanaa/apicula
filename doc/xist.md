@@ -726,9 +726,10 @@ Still open:
   ``synth_gowin -noalu`` so adders become LUT logic.
 * ``SD=0`` (data from the routed ``M`` input) is not in the chipdb: the placer
   cannot route to ``M``, so the packer inserts an identity LUT instead.
-* The ``PIC`` tiles in columns 0/50 have no BFD routing profile, so nets that
-  pass through an edge tile (left/right pads) keep the template routing value.
-  Pad *configuration* is written; edge routing fuses are not.
+* The spine clock tiles (`CENTER6_12K`, `CENTER7_12K`, `CFG*`, the `*_12k`
+  tokens) carry `XI0/XFUSE_BOX` clock-network fuses that are not calibrated;
+  they keep the template value.  This is what the last 4-5 residual bits of a
+  full replay belong to (see "What the bit column 0/50 gap actually is").
 * IOLOGIC output registers, input registers and DDR (ODDR/ODDR2/IDDRX1) all
   have bels, packing and program synthesis; their pad configuration is
   bit-exact against vendor oracles.  Not modelled: the ODDRX4/ODDRX7 and
@@ -942,11 +943,38 @@ SL2-12E_ddr_iddr    (xsIDDRX1, PL2A)  315 / 315 bits
 SL2-12E_ddr_oddr2   (xsODDRX2, PT7A)  all 193 config fuses of the pad
 ```
 
-The remaining `ODDRX2` gap is the top edge's *second* pad group: the cell spans
-`PT7` and `PT10`, and the writer currently evaluates each pad position with only
-its own group's comps, so the `PT10` pads keep the template value.  `SL2-12E_ddr_oddr2`
-reproduces 246 of those 288 bit positions because of it; the same limit applies
-to any design that puts one IOLOGIC across two pad groups.
+Evaluating each pad position with its own group's comps is correct; an earlier
+note here claimed only 246/288 for the `ODDRX2` oracle, which turned out to be a
+double-`column_delta` bug in `apply_pio_comps()` (fixed in dd4f823).  The CLI
+check now reads 479/479 for that oracle and 574/574 for `counter`.
+
+### What the bit column 0/50 gap actually is
+
+`SL2-12E_bitcol_base.json` says it plainly: *"Columns 0/50 have no bit columns of
+their own"*, and `cal.column_base` has no entry for them, so the writer never
+touches a `PIC`/`PIC_right` tile directly.  That is correct, not a gap: the
+`PIC_L5`/`PIC_R5` profiles contain 1154/1150 writable routing fuses but **none**
+of them names `JDI*`, `PAD_*`, `OE_*`, `IOLDO` or `JPADDI*` - the pad-side
+wiring lives in the neighbouring 59-column CIB profiles (`CIB_EBR0_END0_*`,
+`CIB_EBR2_END1_SP_12K`), which are installed and bit-exact.  The only pad-local
+fuse is the input delay, and it is an inverted guard
+(`!arcval(JPADDIC_PIO,JDIC) && wire(JDIC)`) that `_is_config_fuse()` correctly
+leaves alone.
+
+Replaying `counter.xpn` onto an empty image and comparing with the vendor
+bitstream leaves exactly 5 bits:
+
+```
+PLC rows   (29..1073)  4 bits: rows 514, 517, 689, 892, column 1
+bottom pad block       1 bit : (1107, 2033)
+```
+
+Those 4 bits are not PIC fuses: they sit at ram_row 21/22/24 with ram_col 0..1,
+which is the `CENTER6_12K`/`CENTER7_12K` spine tile's `XI0/XFUSE_BOX` clock
+network (`arcval(SNETCIBT_n, SNET_n)`, `arcval(PCLKT3_0, PCLK_1)`, ...).  So the
+remaining gap is the **uncalibrated spine/spine-clock contexts**, not the pad
+column.  Those tiles are 2 columns wide and their bit mapping is not calibrated,
+which is the same item already listed under "still open" above.
 
 ### PIO configuration model
 
